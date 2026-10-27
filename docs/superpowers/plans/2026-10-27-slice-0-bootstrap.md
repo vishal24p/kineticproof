@@ -22,7 +22,7 @@
 - Create: `services/api/pyproject.toml`, `services/api/uv.lock`
 - Create: `services/api/src/kineticproof_api/__init__.py`, `services/api/src/kineticproof_api/main.py`
 - Create: `services/api/tests/test_health.py`
-- Create: `apps/web` TypeScript/App Router scaffold with Tailwind CSS, including `package.json`, `package-lock.json`, `tsconfig.json`, `next-env.d.ts`, `postcss.config.mjs`, `eslint.config.mjs`, and `app/layout.tsx`, `app/page.tsx`, `app/globals.css`
+- Create: `apps/web` TypeScript/App Router scaffold with Tailwind CSS, including `package.json`, `package-lock.json`, `tsconfig.json`, `next.config.ts`, `eslint.config.mjs`, `src/app/layout.tsx`, `src/app/page.tsx`, and `src/app/globals.css`; Next generates ignored `next-env.d.ts`
 - Delete: `apps/web/.gitkeep`, `services/api/.gitkeep`
 - Modify: `README.md`, `docs/PROGRESS.md`
 
@@ -34,7 +34,7 @@
 - [ ] **Step 2: Run the test before adding the app.** Run `uv run --project services/api pytest -c services/api/pyproject.toml services/api/tests/test_health.py -q`; it must fail because the API module is missing.
 - [ ] **Step 3: Add the minimal FastAPI app.** Implement only `GET /health` in `services/api/src/kineticproof_api/main.py`.
 - [ ] **Step 4: Generate and check the Python lockfile.** Run `uv lock --project services/api`, then `uv run --project services/api pytest -c services/api/pyproject.toml services/api/tests/test_health.py -q`; expect one passing test with no deprecation warnings.
-- [ ] **Step 5: Scaffold Next.js with TypeScript, Tailwind CSS, and App Router** using `npx --yes create-next-app@latest apps/web --ts --tailwind --eslint --app --empty --use-npm --skip-install --disable-git --no-agents-md --no-agent-feedback --no-react-compiler --no-cache-components --no-import-alias`. Replace starter page copy with a concise KineticProof introduction that says real video tracking is the next milestone; it must not imply tracking is already implemented.
+- [ ] **Step 5: Scaffold Next.js with TypeScript, Tailwind CSS, and App Router** using `npx --yes create-next-app@latest apps/web --ts --tailwind --eslint --app --empty --use-npm --skip-install --disable-git --no-agents-md --no-agent-feedback --no-react-compiler --no-cache-components --no-import-alias --src-dir`. Replace starter page copy with a concise KineticProof introduction that says real video tracking is the next milestone; it must not imply tracking is already implemented. Keep Tailwind's generated Turbopack setup; remove cache-component flags from `next.config.ts`.
 - [ ] **Step 6: Install and lock frontend dependencies.** Run `npm install --prefix apps/web`.
 - [ ] **Step 7: Verify both local entry points.** Run `uv run --project services/api uvicorn kineticproof_api.main:app --app-dir services/api/src --host 127.0.0.1 --port 8000` and `npm --prefix apps/web run build`; verify the API response with `Invoke-RestMethod http://127.0.0.1:8000/health`.
 - [ ] **Step 8: Document exact start and check commands** in `README.md`; update `docs/PROGRESS.md` only with observed results.
