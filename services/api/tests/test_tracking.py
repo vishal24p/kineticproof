@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from uuid import UUID
+import asyncio
 
 import cv2
 import numpy as np
@@ -24,6 +25,75 @@ def synthetic_video(path: Path, frame_count=6, fps=10.0) -> bytes:
     finally:
         writer.release()
     return path.read_bytes()
+
+
+def test_renamed_avi_container_is_rejected(tmp_path):
+    data = synthetic_video(tmp_path / "synthetic.avi")
+    with TestClient(main.app) as client:
+        response = client.post("/api/observations", files={"file": ("clip.mp4", data)})
+        assert response.status_code == 415
+        assert list(main.app.state.media_dir.iterdir()) == []
+        assert main.app.state.observations == {}
+
+
+def test_single_frame_zero_pts_is_rejected(tmp_path):
+    data = synthetic_video(tmp_path / "synthetic-single.mp4", frame_count=1)
+    with TestClient(main.app) as client:
+        response = client.post("/api/observations", files={"file": ("clip.mp4", data)})
+        assert response.status_code == 422
+        assert "timestamp" in response.json()["detail"]
+        assert list(main.app.state.media_dir.iterdir()) == []
+
+
+@pytest.mark.parametrize("headers", [[], [(b"content-length", b"1")]])
+def test_body_limit_rejects_chunked_input_before_parser(monkeypatch, headers):
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
+    monkeypatch.setattr(main, "MULTIPART_ALLOWANCE_BYTES", 4, raising=False)
+    parser_called = False
+    sent = []
+    chunks = iter([b"1234", b"5678", b"90123"])
+
+    async def parser(scope, receive, send):
+        nonlocal parser_called
+        parser_called = True
+
+    async def receive():
+        return {"type": "http.request", "body": next(chunks), "more_body": True}
+
+    async def send(message):
+        sent.append(message)
+
+    middleware = main.UploadBodyLimit(parser)
+    asyncio.run(middleware({"type": "http", "path": "/api/observations",
+                           "method": "POST", "headers": headers}, receive, send))
+    assert not parser_called
+    assert sent[0]["status"] == 413
+
+
+def test_body_limit_replays_within_limit_input_and_allows_overhead(monkeypatch):
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
+    monkeypatch.setattr(main, "MULTIPART_ALLOWANCE_BYTES", 4, raising=False)
+    received = bytearray()
+    chunks = iter([b"12345678", b"abcd"])
+
+    async def parser(scope, receive, send):
+        while True:
+            message = await receive()
+            received.extend(message["body"])
+            if not message.get("more_body", False):
+                break
+
+    async def receive():
+        chunk = next(chunks)
+        return {"type": "http.request", "body": chunk, "more_body": chunk != b"abcd"}
+
+    async def send(message):
+        raise AssertionError("Valid body should reach parser")
+
+    asyncio.run(main.UploadBodyLimit(parser)(
+        {"type": "http", "path": "/api/observations", "method": "POST",
+         "headers": []}, receive, send))
+    assert received == b"12345678abcd"
 
 
 @pytest.mark.parametrize("suffix", [".mp4", ".mov"])
