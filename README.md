@@ -51,4 +51,6 @@ npm --prefix apps/web run build
 npm --prefix apps/web run lint
 ```
 
+The web app uses Biome for linting and formatting checks.
+
 The landing page is a bootstrap placeholder. No upload or tracking controls are available yet.
