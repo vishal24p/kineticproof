@@ -56,9 +56,10 @@ def test_rejection_leaves_no_files(filename, data, status):
 
 
 def test_upload_byte_counter_rejects_and_cleans_partial_file(monkeypatch):
-    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 1024 * 1024)
     with TestClient(main.app) as client:
-        response = client.post("/api/observations", files={"file": ("clip.mp4", b"x" * 9)})
+        response = client.post("/api/observations", files={
+            "file": ("clip.mp4", b"x" * (1024 * 1024 + 1))})
         assert response.status_code == 413
         assert list(main.app.state.media_dir.iterdir()) == []
 
@@ -80,6 +81,35 @@ def test_shutdown_removes_only_app_owned_media(tmp_path):
         assert list(media_dir.iterdir())
     assert not media_dir.exists()
     assert source.read_bytes() == data
+
+
+def test_truncated_synthetic_upload_rejected_and_removed(tmp_path):
+    data = synthetic_video(tmp_path / "synthetic.mp4")
+    with TestClient(main.app) as client:
+        response = client.post("/api/observations", files={
+            "file": ("clip.mp4", data[:len(data) // 2])})
+        assert response.status_code == 422
+        assert list(main.app.state.media_dir.iterdir()) == []
+
+
+def test_upload_read_failure_removes_partial_file(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    reads = 0
+
+    async def interrupted_read(self, size=-1):
+        nonlocal reads
+        reads += 1
+        if reads == 1:
+            return b"partial video"
+        raise OSError("Synthetic interrupted upload")
+
+    monkeypatch.setattr(UploadFile, "read", interrupted_read)
+    with TestClient(main.app) as client:
+        with pytest.raises(OSError, match="interrupted"):
+            client.post("/api/observations", files={"file": ("clip.mp4", b"video")})
+        assert list(main.app.state.media_dir.iterdir()) == []
+        assert main.app.state.observations == {}
 
 
 def test_inspection_accepts_zero_pts(tmp_path):
