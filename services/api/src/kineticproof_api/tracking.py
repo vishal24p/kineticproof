@@ -16,6 +16,7 @@ def validate_container(path: Path) -> None:
     length = path.stat().st_size
     position = 0
     kinds = set()
+    supported_brands = {b"isom", b"iso2", b"mp41", b"mp42", b"qt  "}
     with path.open("rb") as source:
         while position < length:
             source.seek(position)
@@ -35,9 +36,22 @@ def validate_container(path: Path) -> None:
                 size = length - position
             if size < header_size or size > length - position:
                 break
+            if kind == b"ftyp":
+                payload_size = size - header_size
+                if b"ftyp" in kinds or payload_size < 8 or payload_size % 4:
+                    raise UnsupportedContainer("Invalid MP4/MOV file type brands")
+                major_brand = source.read(4)
+                source.read(4)  # Minor version is not a brand.
+                # Parse compatible brands without letting them rescue an unsupported major.
+                for _ in range((payload_size - 8) // 4):
+                    compatible_brand = source.read(4)
+                    if len(compatible_brand) != 4:
+                        raise UnsupportedContainer("Invalid MP4/MOV compatible brand")
+                if major_brand not in supported_brands:
+                    raise UnsupportedContainer("Only MP4 and MOV brands are supported")
             kinds.add(kind)
             position += size
-    if position != length or not {b"moov", b"mdat"}.issubset(kinds):
+    if position != length or not {b"ftyp", b"moov", b"mdat"}.issubset(kinds):
         raise UnsupportedContainer("Only MP4 and MOV containers are supported")
 
 

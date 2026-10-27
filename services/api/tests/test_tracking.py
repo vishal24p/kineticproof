@@ -1,6 +1,7 @@
 """Synthetic media tests: plumbing evidence, not measured experimental footage."""
 
 import asyncio
+from pathlib import Path
 from tempfile import TemporaryFile
 from uuid import UUID
 
@@ -60,6 +61,25 @@ def test_renamed_unsupported_major_brand_is_rejected(tmp_path, brand):
         assert response.status_code == 415
         assert list(main.app.state.media_dir.iterdir()) == []
         assert main.app.state.observations == {}
+
+
+def test_unbranded_container_is_rejected(tmp_path):
+    data = bytearray(synthetic_video(tmp_path / "synthetic.mp4"))
+    assert data[4:8] == b"ftyp"
+    data[4:8] = b"free"
+    with TestClient(main.app) as client:
+        response = client.post("/api/observations", files={"file": ("clip.mov", bytes(data))})
+        assert response.status_code == 415
+        assert list(main.app.state.media_dir.iterdir()) == []
+
+
+@pytest.mark.parametrize("brand", [b"isom", b"iso2", b"mp41", b"mp42", b"qt  "])
+def test_supported_major_brands_are_accepted(tmp_path, brand):
+    data = bytearray(synthetic_video(tmp_path / "synthetic.mp4"))
+    data[8:12] = brand
+    with TestClient(main.app) as client:
+        response = client.post("/api/observations", files={"file": ("clip.mp4", bytes(data))})
+        assert response.status_code == 200
 
 
 def test_single_frame_zero_pts_is_rejected(tmp_path):
