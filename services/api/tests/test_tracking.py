@@ -50,6 +50,18 @@ def test_renamed_avi_container_is_rejected(tmp_path):
         assert main.app.state.observations == {}
 
 
+@pytest.mark.parametrize("brand", [b"3gp4", b"3gp5", b"3gp6", b"avif"])
+def test_renamed_unsupported_major_brand_is_rejected(tmp_path, brand):
+    data = bytearray(synthetic_video(tmp_path / "synthetic.mp4"))
+    assert data[4:8] == b"ftyp"
+    data[8:12] = brand
+    with TestClient(main.app) as client:
+        response = client.post("/api/observations", files={"file": ("clip.mp4", bytes(data))})
+        assert response.status_code == 415
+        assert list(main.app.state.media_dir.iterdir()) == []
+        assert main.app.state.observations == {}
+
+
 def test_single_frame_zero_pts_is_rejected(tmp_path):
     data = synthetic_video(tmp_path / "synthetic-single.mp4", frame_count=1)
     with TestClient(main.app) as client:
