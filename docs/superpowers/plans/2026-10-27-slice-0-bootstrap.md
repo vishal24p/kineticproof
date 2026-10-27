@@ -21,7 +21,7 @@
 **Files:**
 - Create: `services/api/pyproject.toml`, `services/api/uv.lock`
 - Create: `services/api/src/kineticproof_api/__init__.py`, `services/api/src/kineticproof_api/main.py`
-- Create: `tests/api/test_health.py`
+- Create: `services/api/tests/test_health.py`
 - Create: `apps/web/package.json`, `apps/web/package-lock.json`, `apps/web/tsconfig.json`, `apps/web/next.config.ts`, `apps/web/app/layout.tsx`, `apps/web/app/page.tsx`, `apps/web/app/globals.css`
 - Modify: `README.md`, `docs/PROGRESS.md`
 
@@ -29,10 +29,10 @@
 - API exports FastAPI app as `kineticproof_api.main:app`; `GET /health` returns JSON `{"status":"ok"}`.
 - Web app supports `npm run dev` and `npm run build`.
 
-- [ ] **Step 1: Add API project metadata and a health test** in `services/api/pyproject.toml` and `tests/api/test_health.py`. Declare FastAPI and Uvicorn as runtime dependencies and pytest and httpx as development dependencies. Test that `GET /health` returns HTTP 200 and exactly `{"status":"ok"}`.
-- [ ] **Step 2: Run the test before adding the app.** Run `uv run --project services/api pytest tests/api/test_health.py -q`; it must fail because the API module is missing.
+- [ ] **Step 1: Add API project metadata and a health test** in `services/api/pyproject.toml` and `services/api/tests/test_health.py`. Declare FastAPI and Uvicorn as runtime dependencies, pytest and httpx as development dependencies, and pytest `pythonpath = ["src"]`. Test that `GET /health` returns HTTP 200 and exactly `{"status":"ok"}`.
+- [ ] **Step 2: Run the test before adding the app.** Run `uv run --project services/api pytest services/api/tests/test_health.py -q`; it must fail because the API module is missing.
 - [ ] **Step 3: Add the minimal FastAPI app.** Implement only `GET /health` in `services/api/src/kineticproof_api/main.py`.
-- [ ] **Step 4: Generate and check the Python lockfile.** Run `uv lock --project services/api`, then `uv run --project services/api pytest tests/api/test_health.py -q`; expect one passing test.
+- [ ] **Step 4: Generate and check the Python lockfile.** Run `uv lock --project services/api`, then `uv run --project services/api pytest services/api/tests/test_health.py -q`; expect one passing test.
 - [ ] **Step 5: Scaffold the smallest Next.js TypeScript app in `apps/web`.** Landing page identifies KineticProof and says real video tracking is the next milestone; it must not imply tracking is already implemented.
 - [ ] **Step 6: Install and lock frontend dependencies.** Run `npm install --prefix apps/web`.
 - [ ] **Step 7: Verify both local entry points.** Run `uv run --project services/api uvicorn kineticproof_api.main:app --app-dir services/api/src --host 127.0.0.1 --port 8000` and `npm --prefix apps/web run build`; verify the API response with `Invoke-RestMethod http://127.0.0.1:8000/health`.
