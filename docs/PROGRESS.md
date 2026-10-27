@@ -3,7 +3,7 @@
 | Workstream | Status | Evidence/next action |
 |---|---|---|
 | Scope, scientific framing, MVP roadmap | Documented | PRODUCT, WORKFLOWS, EXPERIMENT |
-| Repo layout and agent workflow | Documented, not created in GitHub | AGENTS + INDEX; create repo |
+| Repo layout and agent workflow | Public repository created | [vishal24p/kineticproof](https://github.com/vishal24p/kineticproof); Slice 0 baseline and feature branch pushed. |
 | Provider-neutral tracking, science and API contracts | Draft specification | TRACKING_CONTRACT, SCIENCE_ENGINE, API_CONTRACTS |
 | Local API and web bootstrap | Verified locally | API health: HTTP 200, `{"status":"ok"}`; API suite: 1 passed; Next.js production build and lint passed; dev homepage: HTTP 200. Commands in README. |
 | Open tracking implementation | Not started | Slice 1 |
