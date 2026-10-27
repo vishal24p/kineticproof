@@ -1,0 +1,13 @@
+clip_id,kind,planned_split,planned_target_length_m,measured_length_m,length_uncertainty_m,original_filename,original_sha256,rights_status,hosted_consent,media_acquisition,source_pts_status,provider_map_status,reference_status,notes
+KP-01,original,development,0.30,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,clean short length
+KP-02,original,development,0.45,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,clean medium length
+KP-03,original,development,0.60,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,clean long length
+KP-04,original,development,0.30,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,repeat KP-01
+KP-05,original,development,0.45,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,repeat KP-02
+KP-06,original,development,0.60,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,repeat KP-03
+KP-07,original,heldout_scene,0.45,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,clutter
+KP-08,original,heldout_scene,0.45,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,low light
+KP-09,original,heldout_scene,0.45,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,alternate bob
+KP-10,original,conditional_negative,0.45,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,partial occlusion
+KP-11,original,conditional_negative,0.45,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,low contrast
+KP-12,original,negative_camera_motion,,,,,,awaiting_owner_assertion,not_granted,not_received,not_checked,not_checked,not_annotated,moving camera

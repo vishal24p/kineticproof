@@ -1,0 +1,2 @@
+# Physics evaluation workflow
+Read `docs/SCIENCE_ENGINE.md`, `docs/EXPERIMENT.md`, `docs/DATA_AND_ANNOTATION.md`, `docs/EVALUATION.md` and `docs/TRACKING_CONTRACT.md`. Verify provider-neutral timestamps, independent ground truth, cycle detection, measurement uncertainty and missing-data reporting. Begin with OpenCV/open models; do not gate on Meta access. Never fabricate samples, runs or statistics. Record actual evidence in `docs/PROGRESS.md`.

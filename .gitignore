@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+__pycache__/
+.pytest_cache/
+.venv/
+node_modules/
+.next/
+dist/
+*.pyc
+*.mp4
+*.mov
+*.avi
+*.webm
+.DS_Store

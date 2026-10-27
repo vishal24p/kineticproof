@@ -1,0 +1,2 @@
+# Hackathon release-evidence workflow
+Read `docs/HACKATHON_RULES.md`, `docs/SUBMISSION.md`, `docs/SECURITY_AND_RISKS.md`, `docs/MODEL_STRATEGY.md` and `docs/PROGRESS.md`. Verify a genuine Meta usage example, public GitHub link, public three-minute demo URL, permissions, traceable benchmark claims and portal receipt. Open-only work can be shown as a development stage but must not be mislabelled as Meta integration.
