@@ -1,7 +1,7 @@
 # Implementation plan — tasks to execute without recurring permission prompts
 
-## Slice 0 — repo/cloud scaffolding
-Create public GitHub repo (no secrets/private footage); configure Codex Cloud, Python `uv`, frontend workspace, basic CI and secret placeholders. Confirm existing GStack/ECC in the actual cloud session; proceed using plain Codex if absent. Acceptance: repo boots in remote environment with documented commands.
+## Slice 0 — local repository scaffolding
+Create the public GitHub repo (no secrets/private footage), Python `uv` API, frontend workspace and basic CI. Document local start/check commands. Codex Cloud setup is deferred and does not block implementation. Acceptance: the API and web app boot locally and CI runs their tests, lint and build.
 
 ## Slice 1 — authentic video through open tracking (first priority)
 Video validator -> safe temporary storage -> media timestamps -> OpenCV baseline provider -> provider-neutral trace with missing-frame flags -> saved/inspectable overlay. Use real authorized sample or clearly synthetic fixture for plumbing. Acceptance: repeatable timestamped output on a consented clip and explicit failures.
