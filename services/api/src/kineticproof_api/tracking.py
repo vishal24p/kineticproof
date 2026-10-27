@@ -7,6 +7,40 @@ from pathlib import Path
 import cv2
 
 
+class UnsupportedContainer(ValueError):
+    pass
+
+
+def validate_container(path: Path) -> None:
+    """Require complete MP4/MOV top-level boxes, including movie and media data."""
+    length = path.stat().st_size
+    position = 0
+    kinds = set()
+    with path.open("rb") as source:
+        while position < length:
+            source.seek(position)
+            header = source.read(8)
+            if len(header) != 8:
+                break
+            size = int.from_bytes(header[:4], "big")
+            kind = header[4:]
+            header_size = 8
+            if size == 1:
+                extended = source.read(8)
+                if len(extended) != 8:
+                    break
+                size = int.from_bytes(extended, "big")
+                header_size = 16
+            elif size == 0:
+                size = length - position
+            if size < header_size or size > length - position:
+                break
+            kinds.add(kind)
+            position += size
+    if position != length or not {b"moov", b"mdat"}.issubset(kinds):
+        raise UnsupportedContainer("Only MP4 and MOV containers are supported")
+
+
 @dataclass(frozen=True)
 class VideoMetadata:
     duration_seconds: float
@@ -21,6 +55,7 @@ def inspect_video(path: Path) -> VideoMetadata:
     try:
         if not capture.isOpened():
             raise ValueError("Video cannot be decoded")
+        validate_container(path)
         fps = capture.get(cv2.CAP_PROP_FPS)
         if not isfinite(fps) or fps <= 0:
             raise ValueError("Video timestamp timebase unavailable")
@@ -46,6 +81,8 @@ def inspect_video(path: Path) -> VideoMetadata:
             frame_count += 1
         if not frame_count or (expected_count > 0 and frame_count != expected_count):
             raise ValueError("Video is empty or could not be fully decoded")
+        if frame_count < 2:
+            raise ValueError("At least two frames are required to validate video timestamps")
         return VideoMetadata(
             previous_timestamp - first_timestamp, width, height, frame_count, fps
         )

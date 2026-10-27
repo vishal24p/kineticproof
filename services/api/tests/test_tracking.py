@@ -1,8 +1,8 @@
 """Synthetic media tests: plumbing evidence, not measured experimental footage."""
 
-from pathlib import Path
-from uuid import UUID
 import asyncio
+from tempfile import TemporaryFile
+from uuid import UUID
 
 import cv2
 import numpy as np
@@ -10,6 +10,20 @@ import pytest
 from fastapi.testclient import TestClient
 
 from kineticproof_api import main
+
+
+@pytest.fixture
+def request_spools(monkeypatch, tmp_path):
+    opened = []
+
+    def create():
+        spool = TemporaryFile(dir=tmp_path)
+        opened.append(spool)
+        return spool
+
+    monkeypatch.setattr(main, "TemporaryFile", create)
+    yield opened
+    assert all(spool.closed for spool in opened)
 
 
 def synthetic_video(path: Path, frame_count=6, fps=10.0) -> bytes:
@@ -46,7 +60,7 @@ def test_single_frame_zero_pts_is_rejected(tmp_path):
 
 
 @pytest.mark.parametrize("headers", [[], [(b"content-length", b"1")]])
-def test_body_limit_rejects_chunked_input_before_parser(monkeypatch, headers):
+def test_body_limit_rejects_chunked_input_before_parser(monkeypatch, headers, request_spools):
     monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
     monkeypatch.setattr(main, "MULTIPART_ALLOWANCE_BYTES", 4, raising=False)
     parser_called = False
@@ -68,9 +82,10 @@ def test_body_limit_rejects_chunked_input_before_parser(monkeypatch, headers):
                            "method": "POST", "headers": headers}, receive, send))
     assert not parser_called
     assert sent[0]["status"] == 413
+    assert len(request_spools) == 1
 
 
-def test_body_limit_replays_within_limit_input_and_allows_overhead(monkeypatch):
+def test_body_limit_replays_within_limit_input_and_allows_overhead(monkeypatch, request_spools):
     monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
     monkeypatch.setattr(main, "MULTIPART_ALLOWANCE_BYTES", 4, raising=False)
     received = bytearray()
@@ -94,11 +109,59 @@ def test_body_limit_replays_within_limit_input_and_allows_overhead(monkeypatch):
         {"type": "http", "path": "/api/observations", "method": "POST",
          "headers": []}, receive, send))
     assert received == b"12345678abcd"
+    assert len(request_spools) == 1
+
+
+def test_body_limit_rejects_large_content_length_before_reading(monkeypatch, request_spools):
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
+    monkeypatch.setattr(main, "MULTIPART_ALLOWANCE_BYTES", 4)
+    sent = []
+
+    async def unexpected(*args):
+        raise AssertionError("Oversized Content-Length must reject before body/parser")
+
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(main.UploadBodyLimit(unexpected)(
+        {"type": "http", "path": "/api/observations", "method": "POST",
+         "headers": [(b"content-length", b"13")]}, unexpected, send))
+    assert sent[0]["status"] == 413
+    assert request_spools == []
+
+
+def test_disconnected_request_cleans_partial_spool(request_spools):
+    messages = iter([
+        {"type": "http.request", "body": b"partial", "more_body": True},
+        {"type": "http.disconnect"},
+    ])
+
+    async def unexpected(*args):
+        raise AssertionError("Disconnected request must not reach parser")
+
+    async def receive():
+        return next(messages)
+
+    asyncio.run(main.UploadBodyLimit(unexpected)(
+        {"type": "http", "path": "/api/observations", "method": "POST",
+         "headers": []}, receive, unexpected))
+    assert len(request_spools) == 1
+
+
+def test_api_body_limit_is_installed(monkeypatch, request_spools):
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
+    monkeypatch.setattr(main, "MULTIPART_ALLOWANCE_BYTES", 4)
+    with TestClient(main.app) as client:
+        response = client.post("/api/observations", files={"file": ("clip.mp4", b"x" * 13)})
+        assert response.status_code == 413
+        assert list(main.app.state.media_dir.iterdir()) == []
 
 
 @pytest.mark.parametrize("suffix", [".mp4", ".mov"])
 def test_upload_accepts_synthetic_video(tmp_path, suffix):
     data = synthetic_video(tmp_path / f"synthetic{suffix}")
+    if suffix == ".mov":
+        assert data[4:12] == b"ftypqt  ", "Fixture must use a real MOV container"
     with TestClient(main.app) as client:
         response = client.post("/api/observations", files={
             "file": (f"private-person-name{suffix}", data, "video/mp4")})
@@ -195,7 +258,7 @@ def test_inspection_accepts_zero_pts(tmp_path):
 
 @pytest.mark.parametrize("timestamps", [[0, 0, 0], [0, float("nan"), 2],
                                          [0, 2, 1]])
-def test_inspection_rejects_missing_or_nonmonotonic_pts(monkeypatch, timestamps):
+def test_inspection_rejects_missing_or_nonmonotonic_pts(monkeypatch, tmp_path, timestamps):
     from kineticproof_api import tracking
 
     class Capture:
@@ -217,7 +280,9 @@ def test_inspection_rejects_missing_or_nonmonotonic_pts(monkeypatch, timestamps)
             self.released = True
 
     capture = Capture()
+    source = tmp_path / "synthetic.mp4"
+    synthetic_video(source)
     monkeypatch.setattr(tracking.cv2, "VideoCapture", lambda *_: capture)
     with pytest.raises(ValueError, match="timestamp"):
-        tracking.inspect_video(Path("synthetic.mp4"))
+        tracking.inspect_video(source)
     assert capture.released
