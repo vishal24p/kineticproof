@@ -6,8 +6,49 @@
 
 **Where to start:** `AGENTS.md` -> `docs/00_INDEX.md` -> `docs/PRODUCT.md` -> `docs/WORKFLOWS.md` -> `docs/ARCHITECTURE.md` -> `docs/IMPLEMENTATION.md`. Read workstream-specific documents before changing that area. No single document is intended to contain everything.
 
-**Project status:** Documentation and design only. No code, measured footage, tests, models, benchmarks, deployment, or Meta integration verified in this package.
+**Project status:** Local API and web bootstrap implemented. Real video tracking is the next milestone. No measured footage, models, benchmarks, deployment, or Meta integration verified.
 
 **Hackathon:** Meta Global AI Developer Hackathon, Indie Developer track; public GitHub repository and 3-minute demo-video URLs required by the user-inspected submission form. Deadline: Nov 4, 2026, 9:00 PM US Eastern per event; re-confirm time and local conversion at submission. See `docs/HACKATHON_RULES.md` and `docs/SUBMISSION.md`.
 
 **Non-goals for the MVP:** native mobile app, live-streaming capture, user accounts, generalized arbitrary physics interpretation, invented measurements, complex infra. Future experiments are extensibility targets; do not silently claim they work.
+
+## Local development
+
+Run commands from the repository root. Requirements: Python 3.12+, uv, Node.js 20.9+, and npm. Local checks used uv 0.11.28, Python 3.14.5, Node 24.14.1, and npm 11.15.0.
+
+Install dependencies from the lockfiles:
+
+```powershell
+uv sync --locked --project services/api
+npm ci --prefix apps/web
+```
+
+Start the API:
+
+```powershell
+uv run --project services/api uvicorn kineticproof_api.main:app --app-dir services/api/src --host 127.0.0.1 --port 8000
+```
+
+In another terminal, check the live endpoint and run the API suite:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/health
+uv run --project services/api pytest -c services/api/pyproject.toml services/api/tests -q
+```
+
+The health endpoint returns `{"status":"ok"}`. It confirms the service boots; tracking and measurement endpoints are not implemented yet.
+
+Start the web app in another terminal, then open [localhost:3000](http://localhost:3000):
+
+```powershell
+npm --prefix apps/web run dev
+```
+
+Check the frontend production build and lint:
+
+```powershell
+npm --prefix apps/web run build
+npm --prefix apps/web run lint
+```
+
+The landing page is a bootstrap placeholder. No upload or tracking controls are available yet.
