@@ -8,7 +8,7 @@ These endpoints are synchronous, local, and temporary. Run one API process bound
 - `POST /api/observations`: multipart `file`, MP4/MOV only with supported container brand (`isom`, `iso2`, `mp41`, `mp42`, QuickTime, AVC, AV1, or M4V), at most 100,000,000 bytes and 30 seconds. Returns `{observation_id,duration_seconds,width,height,frame_count}`. Source PTS must be available and increasing; at least two frames are required. Duration is the last source PTS minus the first.
 - `POST /api/observations/{id}/tracking`: JSON `{x,y,width,height}`, strict integer pixels within the first frame. Runs OpenCV CSRT with default parameters; returns `{status,frame_count}` after trace and overlay both succeed. Status is `succeeded` or `partial` if updates fail. No provider selection or Meta usage is implemented.
 - `GET /api/observations/{id}/tracks`: returns the [v1 TrackResult](TRACKING_CONTRACT.md#implemented-local-v1-mapping).
-- `GET /api/observations/{id}/overlay`: serves the completed overlay as `video/mp4`.
+- `GET /api/observations/{id}/overlay`: serves the completed overlay as `video/mp4`, encoded as VP9 in an MP4 container (`vp09`; OpenCV writer `VP90`). Chromium playback is verified; other browsers must support MP4/VP9. Overlay playback uses constant FPS without audio; trace source timestamps remain authoritative.
 - `POST /api/observations/{id}/measure?format=json|csv`: measures the completed trace using tracked centers and source timestamps. The query is optional and defaults to `json`.
 
 ### Measurement request
