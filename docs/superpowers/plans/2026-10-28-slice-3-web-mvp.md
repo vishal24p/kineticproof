@@ -41,9 +41,9 @@
 - Consume existing `/health` and `/api/observations` through same-origin Next.js rewrites (`/api/health` maps to FastAPI `/health`; observation routes preserve `/api/...`).
 - `page.tsx` renders the client `Workspace` entry point; workspace owns the guided stages and transient request state.
 
-- [ ] Add rewrites from `/api/health` to FastAPI `/health` and `/api/:path*` to the same FastAPI path, using `KINETICPROOF_API_ORIGIN` (default `http://127.0.0.1:8000`) without adding API CORS policy.
-- [ ] Build the responsive four-stage workspace shell and local-session notice; keep copy aligned with `docs/UI_UX.md`.
-- [ ] Run `npm --prefix apps/web run lint` and `npm --prefix apps/web run build`; verify `/api/health` reaches FastAPI when both local servers run.
+- [x] Add rewrites from `/api/health` to FastAPI `/health` and `/api/:path*` to the same FastAPI path, using `KINETICPROOF_API_ORIGIN` (default `http://127.0.0.1:8000`) without adding API CORS policy.
+- [x] Build the responsive four-stage workspace shell and local-session notice; keep copy aligned with `docs/UI_UX.md`.
+- [x] Run `npm --prefix apps/web run lint` and `npm --prefix apps/web run build`; verify `/api/health` reaches FastAPI when both local servers run.
 
 ### Task 2: Upload, target selection, tracking and recovery
 
@@ -95,3 +95,4 @@
 - [ ] Run `npm --prefix apps/web run lint` and `npm --prefix apps/web run build`.
 - [ ] Complete one full browser journey using a synthetic local clip; record exact commands and results in `docs/PROGRESS.md`, including limitations and unverified authentic footage/deployment.
 - [ ] Review diff for accidental media/secrets, run `git diff --check`, then use GStack ship workflow before beginning Slice 4.
+
