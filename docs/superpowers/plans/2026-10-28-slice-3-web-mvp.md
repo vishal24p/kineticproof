@@ -73,15 +73,18 @@
 **Files:**
 - Modify: `apps/web/src/app/workspace.tsx`
 - Modify: `apps/web/src/app/globals.css`
+- Create: `apps/web/src/app/measurement-panel.tsx`
+- Create: `apps/web/src/app/trajectory-plot.tsx`
 
 **Interfaces:**
+- `MeasurementPanel` consumes `observationId`, completed `TrackResult`, and overlay URL from the workspace; it owns measurement inputs/results and passes projected trace samples to `TrajectoryPlot`.
 - Measure: `POST /api/observations/{id}/measure?format=json|csv` with required normalized direction `{motion_axis:{x,y}}`, optional independent `reference_events`, and optional paired `length_m`/`gravity_m_s2`.
 - Trace fields and evidence response follow `docs/API_CONTRACTS.md`.
 
-- [ ] Add keyboard-operable motion-axis drawing and map the selected 2D direction to the request.
+- [ ] Add keyboard-operable motion-axis drawing in `MeasurementPanel` and map the selected 2D direction to the request.
 - [ ] Add optional manual events with event type, independently entered timestamp and uncertainty; scrubbed overlay frame selects only `evidence_frame_index`.
 - [ ] Add paired optional length/gravity controls and submit theory inputs only when both are valid.
-- [ ] Render trajectory projection and detected cycle picks, measured period/MAD, manual reference and theoretical results separately, plus warnings, gaps, method and provenance.
+- [ ] Render trajectory projection and detected cycle picks in `TrajectoryPlot`; render measured period/MAD, manual reference and theoretical results separately, plus warnings, gaps, method and provenance in `MeasurementPanel`.
 - [ ] Render `insufficient_data` without a measured-period value; allow CSV download from the same request parameters and JSON evidence download.
 - [ ] Verify complete measure flow with a synthetic clip, including insufficient data, manual timestamp/frame distinction, and optional theory; verify export responses.
 
