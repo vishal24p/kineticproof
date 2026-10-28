@@ -6,9 +6,12 @@ from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from starlette.concurrency import run_in_threadpool
-from starlette.responses import JSONResponse
+from starlette.responses import FileResponse, JSONResponse
 
-from kineticproof_api.tracking import UnsupportedContainer, VideoMetadata, inspect_video
+from kineticproof_api.tracking import (
+    InitialROI, OverlayError, TrackResult, TrackingRun, UnsupportedContainer,
+    VideoMetadata, inspect_video, track_video,
+)
 
 MAX_UPLOAD_BYTES = 100_000_000
 MULTIPART_ALLOWANCE_BYTES = 65_536
@@ -66,6 +69,7 @@ class UploadBodyLimit:
 class Observation:
     source_path: Path
     metadata: VideoMetadata
+    tracking_run: TrackingRun | None = None
 
 
 @asynccontextmanager
@@ -104,7 +108,7 @@ async def upload_observation(file: UploadFile) -> dict[str, str | float | int]:
                 size += len(chunk)
                 if size > MAX_UPLOAD_BYTES:
                     raise HTTPException(413, "Video exceeds 100 MB upload limit")
-                output.write(chunk)
+                await run_in_threadpool(output.write, chunk)
         try:
             metadata = await run_in_threadpool(inspect_video, source_path)
         except UnsupportedContainer as error:
@@ -126,3 +130,43 @@ async def upload_observation(file: UploadFile) -> dict[str, str | float | int]:
         if source_path is not None and not accepted:
             source_path.unlink(missing_ok=True)
         await file.close()
+
+
+def get_observation(observation_id: str) -> Observation:
+    observation = app.state.observations.get(observation_id)
+    if observation is None:
+        raise HTTPException(404, "Observation not found")
+    return observation
+
+
+def get_tracking_run(observation_id: str) -> TrackingRun:
+    run = get_observation(observation_id).tracking_run
+    if run is None:
+        raise HTTPException(409, "No completed tracking result")
+    return run
+
+
+@app.post("/api/observations/{observation_id}/tracking")
+def track_observation(observation_id: str, roi: InitialROI) -> dict[str, str | int]:
+    observation = get_observation(observation_id)
+    overlay_path = app.state.media_dir / f"{uuid4()}-overlay.mp4"
+    try:
+        trace = track_video(observation.source_path, observation.metadata,
+                            roi, observation_id, overlay_path)
+    except OverlayError as error:
+        raise HTTPException(500, str(error)) from error
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    # One assignment publishes the matching pair; failed reruns leave prior output intact.
+    observation.tracking_run = TrackingRun(trace, overlay_path)
+    return {"status": trace.status, "frame_count": len(trace.frames)}
+
+
+@app.get("/api/observations/{observation_id}/tracks", response_model=TrackResult)
+def get_tracks(observation_id: str) -> TrackResult:
+    return get_tracking_run(observation_id).trace
+
+
+@app.get("/api/observations/{observation_id}/overlay")
+def get_overlay(observation_id: str) -> FileResponse:
+    return FileResponse(get_tracking_run(observation_id).overlay_path, media_type="video/mp4")
