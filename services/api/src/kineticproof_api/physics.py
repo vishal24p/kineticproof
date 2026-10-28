@@ -94,10 +94,19 @@ class MeasurementProvenance(BaseModel):
     run_config_id: str
 
 
+class MeasurementConfig(BaseModel):
+    filter_name: Literal["median"] = "median"
+    filter_window_samples: Literal[3] = 3
+    detector: Literal["local_maximum"] = "local_maximum"
+    prominence_method: Literal["topographic"] = "topographic"
+    prominence_fraction: Literal[0.1] = 0.1
+
+
 class MeasurementResult(BaseModel):
     schema_version: str
     status: Literal["succeeded", "insufficient_data"]
     motion_axis: MotionAxis
+    measurement_config: MeasurementConfig
     valid_frame_count: int
     total_frame_count: int
     valid_frame_fraction: float
@@ -119,8 +128,15 @@ class MeasurementResult(BaseModel):
 
 def _prominence(samples, peak):
     height = samples[peak][2]
-    left_min = min(item[2] for item in samples[:peak])
-    right_min = min(item[2] for item in samples[peak + 1:])
+    left_min = right_min = height
+    for i in range(peak - 1, -1, -1):
+        if samples[i][2] > height:
+            break
+        left_min = min(left_min, samples[i][2])
+    for i in range(peak + 1, len(samples)):
+        if samples[i][2] > height:
+            break
+        right_min = min(right_min, samples[i][2])
     return height - max(left_min, right_min)
 
 
@@ -142,6 +158,13 @@ def _manual_intervals(events):
 
 
 def measure_trace(trace: TrackResult, request: MeasurementRequest) -> MeasurementResult:
+    config = MeasurementConfig()
+    theory = None
+    if request.length_m is not None:
+        # Take square roots before division to avoid overflowing/underflowing L/g.
+        theory = (2 * pi * sqrt(request.length_m)) / sqrt(request.gravity_m_s2)
+        if not isfinite(theory) or theory <= 0:
+            raise ValueError("theoretical period must be finite and positive")
     frames = trace.frames
     frame_indexes = {frame.frame_index for frame in frames}
     if any(event.evidence_frame_index not in frame_indexes for event in request.reference_events):
@@ -178,7 +201,7 @@ def measure_trace(trace: TrackResult, request: MeasurementRequest) -> Measuremen
         for i in range(1, len(raw) - 1):
             samples[i] = (raw[i][0], raw[i][1], median([raw[i-1][2], raw[i][2], raw[i+1][2]]))
         span = max(p[2] for p in samples) - min(p[2] for p in samples)
-        threshold = .1 * span
+        threshold = config.prominence_fraction * span
         thresholds.append(SegmentProminenceThreshold(
             start_frame_index=samples[0][0], end_frame_index=samples[-1][0], threshold_px=threshold))
         candidates = []
@@ -216,13 +239,15 @@ def measure_trace(trace: TrackResult, request: MeasurementRequest) -> Measuremen
     manual = _manual_intervals(request.reference_events)
     manual_period = median([item.period_seconds for item in manual]) if manual else None
     warnings = []
+    if gaps:
+        warnings.append("Missing or invalid tracked frames split the trace; cycles do not cross gaps.")
     if len(cycles) < 2:
         warnings.append("At least two complete cycles are required to report a measured period.")
     if rejected:
         warnings.append("Some candidate turning points did not meet the prominence threshold.")
     return MeasurementResult(schema_version="1.0.0",
         status="succeeded" if measured is not None else "insufficient_data",
-        motion_axis=request.motion_axis, valid_frame_count=valid_count,
+        motion_axis=request.motion_axis, measurement_config=config, valid_frame_count=valid_count,
         total_frame_count=len(frames), valid_frame_fraction=valid_count / len(frames) if frames else 0,
         turning_points=turns, rejected_candidate_count=rejected,
         prominence_threshold_px=max((item.threshold_px for item in thresholds), default=0),
@@ -230,8 +255,7 @@ def measure_trace(trace: TrackResult, request: MeasurementRequest) -> Measuremen
         measured_period_seconds=measured, cycle_mad_seconds=mad,
         source_timing_resolution_seconds=timing, gap_ranges=gaps,
         manual_reference_intervals=manual, manual_reference_period_seconds=manual_period,
-        theoretical_period_seconds=(2*pi*sqrt(request.length_m/request.gravity_m_s2)
-            if request.length_m is not None else None), warnings=warnings,
+        theoretical_period_seconds=theory, warnings=warnings,
         provenance=MeasurementProvenance(source_video_sha256=trace.provenance.source_video_sha256,
             provider_name=trace.provider_name, model_name=trace.model_name,
             model_version=trace.model_version, run_config_id=trace.run_config_id))

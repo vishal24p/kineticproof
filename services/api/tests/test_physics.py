@@ -27,16 +27,34 @@ def test_axis_must_be_finite_nonzero_and_is_normalized():
 
 
 def test_periods_use_irregular_source_times_and_do_not_cross_gaps():
-    values = [0, 2, 0, -2, 0, 2, 0, None, 2, 0, -2, 0, 2, 0]
-    times = [0, .07, .19, .31, .5, .62, .8, .9, 1.01, 1.13, 1.3, 1.49, 1.7, 1.85]
+    segment = [0, 0, 2, 2, 2, 0, 0, 0, 2, 2, 2, 0, 0]
+    values = segment + [None] + segment
+    times = [0, .07, .19, .31, .5, .62, .8, .9, 1.01, 1.13, 1.3, 1.49, 1.7,
+             1.85, 2, 2.07, 2.19, 2.31, 2.5, 2.62, 2.8, 2.9, 3.01, 3.18, 3.3, 3.49, 3.7]
     result = measure_trace(trace(values, times), MeasurementRequest(motion_axis={"x": 1, "y": 0}))
-    assert result.gap_ranges[0].start_frame_index == 7
-    assert result.gap_ranges[0].end_frame_index == 7
-    valid_segments = [(0, 6), (8, 13)]
-    assert all(any(start <= cycle.start_frame_index <= cycle.end_frame_index <= end
-                   for start, end in valid_segments) for cycle in result.cycles)
-    assert all(c.period_seconds != pytest.approx(times[8] - times[5]) for c in result.cycles)
+    assert result.status == "succeeded"
+    assert [(gap.start_frame_index, gap.end_frame_index) for gap in result.gap_ranges] == [(13, 13)]
+    assert [turn.frame_index for turn in result.turning_points] == [3, 9, 17, 23]
+    assert [(c.start_frame_index, c.end_frame_index) for c in result.cycles] == [(3, 9), (17, 23)]
+    assert [(c.start_timestamp_seconds, c.end_timestamp_seconds) for c in result.cycles] == [
+        (.31, 1.13), (2.31, 3.18)]
+    assert [c.period_seconds for c in result.cycles] == pytest.approx([.82, .87])
+    assert result.measured_period_seconds == pytest.approx(.845)
     assert result.source_timing_resolution_seconds == pytest.approx(.12)
+    assert "Missing or invalid tracked frames split the trace; cycles do not cross gaps." in result.warnings
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_topographic_prominence_rejects_broad_shoulders(reverse):
+    values = [0, 0, 0, 10, 10, 10, 9.5, 9.5, 9.5, 9.8, 9.8, 9.8, 0, 0, 0]
+    if reverse:
+        values.reverse()
+    result = measure_trace(trace(values), MeasurementRequest(motion_axis={"x": 1, "y": 0}))
+    assert result.prominence_threshold_px == 1
+    assert [point.position_px for point in result.turning_points] == [10]
+    assert result.turning_points[0].prominence_px == 10
+    assert result.rejected_candidate_count == 1
+    assert result.cycles == []
 
 
 def test_prominence_thresholds_are_reported_for_each_amplitude_segment():

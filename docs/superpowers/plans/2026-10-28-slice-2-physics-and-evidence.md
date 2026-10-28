@@ -17,10 +17,13 @@
 - Require a finite, nonzero 2D motion axis and normalize it before projecting centers.
 - Keep null centers as gaps; do not interpolate or form cycles across gaps.
 - Apply a three-sample median filter only within contiguous valid segments.
+- Disclose `measurement_config` (`filter_name: "median"`, `filter_window_samples: 3`, `detector: "local_maximum"`, `prominence_method: "topographic"`, `prominence_fraction: 0.1`) separately from tracking provenance.
 - Require peak prominence ≥10% of the segment's peak-to-peak range; report the threshold and rejected-candidate count.
+- Bound each prominence side scan by a strictly higher sample or the segment boundary; report missing-data warnings whenever gaps exist, including successful results.
 - Aggregate complete same-direction peak intervals with the median; report cycle-to-cycle MAD and source timing resolution separately, not as a confidence interval.
 - Return `insufficient_data` with a null measured period unless at least two complete cycles are available.
 - Compute theoretical period only when both positive finite `length_m` and `gravity_m_s2` are supplied.
+- Avoid intermediate theory ratio overflow/underflow with `(2π√L)/√g`; return 422 for a nonfinite or nonpositive derived period in either output format.
 - Report measured, manual-reference, and theoretical periods separately; do not infer metric velocity or acceleration from pixels.
 
 ## Review Focus
@@ -43,7 +46,7 @@
 - Consumes: `kineticproof_api.tracking.TrackResult`, `TrackFrame`, and their source timestamps/centers.
 - `MeasurementRequest`: Pydantic model with finite nonzero `motion_axis: MotionAxis(x: FiniteFloat, y: FiniteFloat)`, `reference_events: list[ReferenceEvent]` defaulting via `Field(default_factory=list)`, and optional finite `length_m` / `gravity_m_s2`.
 - `ReferenceEvent`: Pydantic model with `event_type: Literal["leftmost", "rightmost", "same_direction"]`, finite `timestamp_seconds`, strict nonnegative `evidence_frame_index`, finite nonnegative `uncertainty_seconds`, and optional `notes`.
-- `MeasurementResult`: Pydantic model with `schema_version`, `status: Literal["succeeded", "insufficient_data"]`, motion axis, valid/total frame counts and fraction, accepted turning points, rejected candidate count, prominence threshold in pixels, cycle list, measured period or null, cycle MAD or null, source timing resolution or null, gap ranges, manual reference intervals and median, theoretical period or null, warnings, and provenance.
+- `MeasurementResult`: Pydantic model with `schema_version`, `status: Literal["succeeded", "insufficient_data"]`, motion axis, explicit `measurement_config` with the fixed filter/detector settings above, valid/total frame counts and fraction, accepted turning points, rejected candidate count, prominence threshold in pixels, cycle list, measured period or null, cycle MAD or null, source timing resolution or null, gap ranges, manual reference intervals and median, theoretical period or null, warnings, and provenance.
 - Nested output records: `TurningPoint(frame_index, timestamp_seconds, position_px, prominence_px)`; `CyclePeriod(start_frame_index, end_frame_index, start_timestamp_seconds, end_timestamp_seconds, period_seconds, prominence_px)`; `ManualReferenceInterval(event_type, start_timestamp_seconds, end_timestamp_seconds, period_seconds, start_uncertainty_seconds, end_uncertainty_seconds)`; `FrameRange(start_frame_index, end_frame_index)`; `MeasurementProvenance(source_video_sha256, provider_name, model_name, model_version, run_config_id)`.
 - Produces `measure_trace(trace: TrackResult, request: MeasurementRequest) -> MeasurementResult` and `measurement_csv(result: MeasurementResult) -> str`.
 
@@ -159,6 +162,8 @@ git commit -m "docs: record physics measurement contract"
 
 ## Final acceptance
 
+- Broad shoulder peaks must survive filtering but be rejected by topographic prominence; gaps must leave actual cycles on both sides with exact source timestamps and no cross-gap interval.
+- JSON discloses measurement configuration; successful gapped measurements warn about missing data. JSON and CSV preserve representable extreme theoretical periods and reject unrepresentable periods with 422.
 - A synthetic trace with known period produces matching cycle intervals from source timestamps, without interpolation across gaps.
 - JSON and CSV responses represent the same request and calculation.
 - Manual reference and theoretical values remain separate from the measured period.
