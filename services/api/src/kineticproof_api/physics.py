@@ -80,6 +80,12 @@ class FrameRange(BaseModel):
     end_frame_index: int
 
 
+class SegmentProminenceThreshold(BaseModel):
+    start_frame_index: int
+    end_frame_index: int
+    threshold_px: float
+
+
 class MeasurementProvenance(BaseModel):
     source_video_sha256: str
     provider_name: str
@@ -97,7 +103,8 @@ class MeasurementResult(BaseModel):
     valid_frame_fraction: float
     turning_points: list[TurningPoint]
     rejected_candidate_count: int
-    prominence_threshold_px: float
+    prominence_threshold_px: float = Field(description="Maximum of the per-segment thresholds below.")
+    segment_prominence_thresholds: list[SegmentProminenceThreshold]
     cycles: list[CyclePeriod]
     measured_period_seconds: float | None
     cycle_mad_seconds: float | None
@@ -172,7 +179,8 @@ def measure_trace(trace: TrackResult, request: MeasurementRequest) -> Measuremen
             samples[i] = (raw[i][0], raw[i][1], median([raw[i-1][2], raw[i][2], raw[i+1][2]]))
         span = max(p[2] for p in samples) - min(p[2] for p in samples)
         threshold = .1 * span
-        thresholds.append(threshold)
+        thresholds.append(SegmentProminenceThreshold(
+            start_frame_index=samples[0][0], end_frame_index=samples[-1][0], threshold_px=threshold))
         candidates = []
         i = 1
         while i < len(samples) - 1:
@@ -217,7 +225,8 @@ def measure_trace(trace: TrackResult, request: MeasurementRequest) -> Measuremen
         motion_axis=request.motion_axis, valid_frame_count=valid_count,
         total_frame_count=len(frames), valid_frame_fraction=valid_count / len(frames) if frames else 0,
         turning_points=turns, rejected_candidate_count=rejected,
-        prominence_threshold_px=max(thresholds, default=0), cycles=cycles,
+        prominence_threshold_px=max((item.threshold_px for item in thresholds), default=0),
+        segment_prominence_thresholds=thresholds, cycles=cycles,
         measured_period_seconds=measured, cycle_mad_seconds=mad,
         source_timing_resolution_seconds=timing, gap_ranges=gaps,
         manual_reference_intervals=manual, manual_reference_period_seconds=manual_period,

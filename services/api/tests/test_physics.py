@@ -32,9 +32,21 @@ def test_periods_use_irregular_source_times_and_do_not_cross_gaps():
     result = measure_trace(trace(values, times), MeasurementRequest(motion_axis={"x": 1, "y": 0}))
     assert result.gap_ranges[0].start_frame_index == 7
     assert result.gap_ranges[0].end_frame_index == 7
-    assert all(c.start_frame_index < 7 or c.end_frame_index > 7 for c in result.cycles)
+    valid_segments = [(0, 6), (8, 13)]
+    assert all(any(start <= cycle.start_frame_index <= cycle.end_frame_index <= end
+                   for start, end in valid_segments) for cycle in result.cycles)
     assert all(c.period_seconds != pytest.approx(times[8] - times[5]) for c in result.cycles)
     assert result.source_timing_resolution_seconds == pytest.approx(.12)
+
+
+def test_prominence_thresholds_are_reported_for_each_amplitude_segment():
+    values = [0, 1, 4, 1, 0, -1, 0, 1, 4, 1, 0, None,
+              0, 10, 40, 10, 0, -10, 0, 10, 40, 10, 0]
+    result = measure_trace(trace(values), MeasurementRequest(motion_axis={"x": 1, "y": 0}))
+    thresholds = result.segment_prominence_thresholds
+    assert [(t.start_frame_index, t.end_frame_index) for t in thresholds] == [(0, 10), (12, 22)]
+    assert [t.threshold_px for t in thresholds] == pytest.approx([.1, 1])
+    assert result.prominence_threshold_px == max(t.threshold_px for t in thresholds)
 
 
 def test_turning_points_manual_reference_theory_and_csv():
