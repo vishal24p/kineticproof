@@ -15,6 +15,7 @@
 - API remains local and bound to localhost; no public deployment in this slice.
 - Upload limit stays 100,000,000 bytes and 30 seconds; accepted formats stay MP4/MOV per API contract.
 - Use OpenCV CSRT outputs honestly; label provider and preserve partial/gap/insufficient states.
+- Encode annotated MP4 overlays with browser-playable VP9 (`VP90`) because the existing `mp4v` overlay is rejected by Chromium; preserve the `video/mp4` route and add no codec dependency.
 - Manual reference event time and uncertainty are entered independently from video PTS; scrubbed video frame supplies evidence index only.
 - No fabricated measurements, persistence, auth, new provider, or new dependency.
 - Keep user media local; use synthetic clips for verification and do not commit video files.
@@ -50,17 +51,22 @@
 **Files:**
 - Modify: `apps/web/src/app/workspace.tsx`
 - Modify: `apps/web/src/app/globals.css`
+- Modify: `services/api/src/kineticproof_api/tracking.py`
+- Modify: `services/api/tests/test_tracking.py`
+- Modify: `docs/API_CONTRACTS.md`
 
 **Interfaces:**
 - Upload: `POST /api/observations` multipart `file`; response supplies `observation_id`, dimensions, duration and frame count.
 - Track: `POST /api/observations/{id}/tracking` JSON `{x,y,width,height}`; then read `/tracks` and `/overlay`.
 - API keeps previous successful tracking pair after a failed rerun.
+- Overlay remains served as `video/mp4`; encode it using OpenCV's `VP90` MP4 writer so Chromium can inspect it in-page.
 
 - [ ] Add labelled video upload with client-side format/size feedback and render server validation errors; verify unsupported file and API 413/415 paths.
 - [ ] Add keyboard-operable video frame ROI selection; convert its displayed rectangle to integer source pixels and reject empty/out-of-bounds boxes before submit.
 - [ ] Submit tracking, fetch trace and annotated overlay; show loading, success, partial, and failure feedback with OpenCV provider identity.
 - [ ] Allow target reselection and rerun; retain and display last successful trace/overlay if rerun fails.
-- [ ] Verify with a generated synthetic clip: upload → choose target → track → inspect overlay; also verify invalid ROI and failed/partial track feedback. Exercise proxy pass-through with a valid synthetic MP4 close to (but within) the 100,000,000-byte file cap when practical.
+- [ ] Change overlay encoding from `mp4v` to `VP90` and add a focused API regression asserting the generated MP4 contains a browser-decodable video stream.
+- [ ] Document overlay video codec and verify through generated synthetic media: upload → choose target → track → inspect overlay; also verify invalid ROI and failed/partial track feedback. Exercise proxy pass-through with a valid synthetic MP4 close to (but within) the 100,000,000-byte file cap when practical.
 
 ### Task 3: Axis selection, measurement and evidence
 
