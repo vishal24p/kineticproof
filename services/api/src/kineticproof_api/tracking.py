@@ -248,7 +248,7 @@ def track_video(source_path: Path, metadata: VideoMetadata, roi: InitialROI,
                 try:
                     # shortcut: CFR preview, use JSON PTS for timing until VFR export is needed.
                     writer = cv2.VideoWriter(str(overlay_path), cv2.CAP_FFMPEG,
-                        cv2.VideoWriter_fourcc(*"mp4v"), fps,
+                        cv2.VideoWriter_fourcc(*"VP90"), fps,
                         (metadata.width, metadata.height))
                     if not writer.isOpened():
                         raise OverlayError("Overlay encoder unavailable")

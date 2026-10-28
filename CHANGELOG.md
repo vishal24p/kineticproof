@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0.0] - 2026-10-28
+
+### Added
+
+- Complete a local video investigation from upload and target selection through tracking, period measurement, and JSON or CSV evidence export.
+- Review annotated tracks and motion plots, add independent manual timing references, and get a controlled prompt for the next trial.
+- Keep uncertain tracking failures from publishing stale measurements, with a browser regression test in CI.
+
+### Changed
+
+- Bind local web servers to loopback and clarify the effective pendulum length used for theory comparisons.
+
 ## [0.2.0.0] - 2026-10-28
 
 ### Added
