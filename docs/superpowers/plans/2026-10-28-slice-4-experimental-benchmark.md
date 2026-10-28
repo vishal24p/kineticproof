@@ -118,7 +118,8 @@
 - Modify: `docs/PROGRESS.md` only with checks actually run
 - Modify: `README.md`
 
-- [ ] Add CLI usage for `freeze` and `run`, stable exit codes, and help text; add `test_cli_help_and_subcommands` using subprocesses and run `uv run --project services/api python -m kineticproof_api.benchmark --help`.- [ ] Add `test_freeze_and_run_require_locked_clean_commit`, proving the CLI refuses a dirty checkout and a source HEAD different from the lock before freeze or scoring.
+- [ ] Add CLI usage for `freeze` and `run`, stable exit codes, and help text; add `test_cli_help_and_subcommands` using subprocesses and run `uv run --project services/api python -m kineticproof_api.benchmark --help`.
+- [ ] Add `test_freeze_and_run_require_locked_clean_commit`, proving the CLI refuses a dirty checkout and a source HEAD different from the lock before freeze or scoring.
 - [ ] Add `test_synthetic_cli_freeze_run_and_mutation_rejection` using a temporary clean Git repo, generated media, and labels; mark its output synthetic and keep all generated files outside the repo.
 - [ ] Keep the existing CSV template columns, add the named per-rater fields, and document blank unsupported metrics plus explicit unavailability reasons, clip-equal aggregation, failure denominators, and freeze policy.
 - [ ] Document that `latency_s` is machine-specific elapsed time for tracking and all rater measurements, excluding validation and report writing.
