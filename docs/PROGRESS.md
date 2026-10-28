@@ -4,7 +4,7 @@
 |---|---|---|
 | Scope, scientific framing, MVP roadmap | Documented | PRODUCT, WORKFLOWS, EXPERIMENT |
 | Repo layout and agent workflow | Public repository created | [vishal24p/kineticproof](https://github.com/vishal24p/kineticproof); Slice 0 baseline and feature branch pushed. |
-| Provider-neutral tracking, science and API contracts | Local tracking v1 implemented; science remains draft | TRACKING_CONTRACT, SCIENCE_ENGINE, API_CONTRACTS |
+| Provider-neutral tracking, science and API contracts | Local tracking v1 and Slice 2 measurement implemented; authentic validation remains pending | TRACKING_CONTRACT, SCIENCE_ENGINE, API_CONTRACTS |
 | Local API and web bootstrap | Verified locally | API health: HTTP 200, `{"status":"ok"}`; API suite: 1 passed; Next.js production build and lint passed; dev homepage: HTTP 200. Commands in README. |
 | Open tracking implementation | Local CSRT trace and overlay verified with synthetic media | Slice 1 API: 67 tests passed locally; authentic footage acceptance remains unverified |
 | Cloud Codex environment | Deferred | Outside Slice 0 scope |
