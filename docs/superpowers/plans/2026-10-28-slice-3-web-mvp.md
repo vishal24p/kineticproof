@@ -92,17 +92,21 @@
 
 **Files:**
 - Modify: `apps/web/src/app/workspace.tsx`
+- Modify: `apps/web/src/app/measurement-panel.tsx`
 - Modify: `apps/web/src/app/globals.css`
 - Modify: `README.md`
 - Modify: `docs/PROGRESS.md`
+- Modify: `docs/IMPLEMENTATION.md`
 
 **Interfaces:**
 - Next-trial content is a deterministic, clearly labeled pendulum prompt grounded in the observed workflow/limitations; no new API route or AI claim.
+- `MeasurementPanel` reports completed measurement status/gaps to the workspace so the prompt can adapt deterministically.
 
-- [ ] Add the final stage with a bounded follow-up investigation prompt and label it as a suggested plan, not a measured result.
-- [ ] Check keyboard flow, visible focus, labels/status announcements, contrast, narrow viewport layout, and all loading/error/partial/insufficient states.
+- [ ] Add the final stage with a bounded follow-up investigation prompt: advise recapture for missing/partial frames, a longer clip for insufficient cycles, and changing only pendulum length after a successful measurement; label every prompt as a suggestion, not a result.
+- [ ] Prevent stage panels from stretching to unrelated row heights; check keyboard flow, visible focus, labels/status announcements, contrast, and layouts at 320, 768, 1024, and 1440 px.
 - [ ] Run `npm --prefix apps/web run lint` and `npm --prefix apps/web run build`.
-- [ ] Complete one full browser journey using a synthetic local clip; record exact commands and results in `docs/PROGRESS.md`, including limitations and unverified authentic footage/deployment.
+- [ ] Complete one full browser journey using a synthetic local clip; verify next-trial prompts for partial/gapped, insufficient, and successful evidence; record exact commands and results in `docs/PROGRESS.md`, including limitations and unverified authentic footage/deployment.
+- [ ] Update README and implementation roadmap to describe the local web journey and mark Slice 3 complete; retain Slice 6 as the deployment milestone.
 - [ ] Review diff for accidental media/secrets, run `git diff --check`, then use GStack ship workflow before beginning Slice 4.
 
 
