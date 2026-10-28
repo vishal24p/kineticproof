@@ -4,6 +4,7 @@ import csv
 import json
 from pathlib import Path
 
+import cv2
 from pydantic import ValidationError
 
 from kineticproof_api.main import MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES
@@ -33,6 +34,22 @@ def _private_path(path, dataset_root, label):
     return root, resolved
 
 
+def _last_video_timestamp(path: Path) -> float:
+    capture = cv2.VideoCapture(str(path), cv2.CAP_FFMPEG)
+    try:
+        if not capture.isOpened():
+            raise ValueError("Video cannot be decoded")
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        timestamp = None
+        while capture.read()[0]:
+            timestamp = capture.get(cv2.CAP_PROP_PTS) / fps
+        if timestamp is None:
+            raise ValueError("Video has no source timestamps")
+        return timestamp
+    finally:
+        capture.release()
+
+
 def load_manifest(path, dataset_root) -> list[dict]:
     root, manifest_path = _private_path(path, dataset_root, "manifest path")
     try:
@@ -52,9 +69,9 @@ def load_manifest(path, dataset_root) -> list[dict]:
         if clip_id in seen:
             raise ValueError(f"Duplicate clip_id: {clip_id}")
         seen.add(clip_id)
-        if record["split"] not in SPLITS:
+        if not isinstance(record["split"], str) or record["split"] not in SPLITS:
             raise ValueError(f"{where} has unsupported split")
-        if record["scene_condition"] not in CONDITIONS:
+        if not isinstance(record["scene_condition"], str) or record["scene_condition"] not in CONDITIONS:
             raise ValueError(f"{where} has unsupported scene_condition")
         if record["rights_status"] != "permitted":
             raise ValueError(f"{where} requires rights_status='permitted'")
@@ -127,7 +144,9 @@ def validate_dataset(manifest, labels, dataset_root) -> None:
     for record in manifest:
         if record.get("rights_status") != "permitted":
             raise ValueError(f"Clip {record.get('clip_id')!r} requires rights_status='permitted'")
-        if record.get("split") not in SPLITS or record.get("scene_condition") not in CONDITIONS:
+        if (not isinstance(record.get("split"), str) or record["split"] not in SPLITS
+                or not isinstance(record.get("scene_condition"), str)
+                or record["scene_condition"] not in CONDITIONS):
             raise ValueError(f"Clip {record.get('clip_id')!r} has an unsupported split or scene_condition")
         session, split = record["recording_session_id"], record["split"]
         if session in sessions and sessions[session] != split:
@@ -146,9 +165,12 @@ def validate_dataset(manifest, labels, dataset_root) -> None:
         metadata = records[clip_id].get("_video_metadata")
         if metadata is None:
             metadata = inspect_video(Path(dataset_root) / records[clip_id]["video_path"])
+        last_timestamp = _last_video_timestamp(
+            records[clip_id].get("_resolved_video_path", root / records[clip_id]["video_path"])
+        )
         for rater_id, events in raters.items():
             for event in events:
                 if event.evidence_frame_index >= metadata.frame_count:
                     raise ValueError(f"Evidence frame index out of range for clip {clip_id}, rater {rater_id}")
-                if event.timestamp_seconds > metadata.duration_seconds:
+                if event.timestamp_seconds > last_timestamp:
                     raise ValueError(f"Event timestamp exceeds clip duration for clip {clip_id}, rater {rater_id}")

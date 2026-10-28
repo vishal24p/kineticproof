@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import pytest
 
+from kineticproof_api import benchmark
 from kineticproof_api.benchmark import load_event_labels, load_manifest, validate_dataset
 
 
@@ -39,7 +40,7 @@ def test_manifest_accepts_permitted_relative_media(tmp_path):
 @pytest.mark.parametrize("change", [
     {"video_path": "missing.mp4"}, {"video_path": "../outside.mp4"},
     {"clip_id": ""}, {"split": "validation"}, {"scene_condition": "busy"},
-    {"rights_status": "pending"}, {"initial_roi": {"x": -1,"y": 1,"width": 5,"height": 5}},
+    {"rights_status": "pending"}, {"split": []}, {"scene_condition": {"bad": True}}, {"initial_roi": {"x": -1,"y": 1,"width": 5,"height": 5}},
     {"motion_axis": {"x": 0,"y": 0}},
 ])
 def test_manifest_rejects_invalid_records(tmp_path, change):
@@ -47,6 +48,14 @@ def test_manifest_rejects_invalid_records(tmp_path, change):
     item.update(change)
     root = dataset(tmp_path, [item])
     with pytest.raises(ValueError):
+        load_manifest(root / "manifest.json", root)
+
+
+def test_manifest_rejects_missing_required_fields_and_wrong_types(tmp_path):
+    item = dict(clip_id="clip-a", recording_session_id="session-a", video_path="clip.mp4", split="test", scene_condition="clean", initial_roi=dict(x=1,y=1,width=10,height=10), motion_axis=dict(x=1,y=0), rights_status="permitted")
+    item.pop("recording_session_id")
+    root = dataset(tmp_path, [item])
+    with pytest.raises(ValueError, match="must contain"):
         load_manifest(root / "manifest.json", root)
 
 
@@ -120,3 +129,11 @@ def test_session_cannot_cross_splits(tmp_path):
     with pytest.raises(ValueError):
         validate_dataset(records, {}, root)
 
+
+
+def test_offset_source_timestamps_are_checked_against_final_pts(tmp_path, monkeypatch):
+    root = dataset(tmp_path)
+    records = load_manifest(root / "manifest.json", root)
+    monkeypatch.setattr(benchmark, "_last_video_timestamp", lambda path: 10.5)
+    labels = {"clip-a": {"r1": [benchmark.ReferenceEvent(event_type="leftmost", timestamp_seconds=10.4, evidence_frame_index=4, uncertainty_seconds=0.01)]}}
+    validate_dataset(records, labels, root)
