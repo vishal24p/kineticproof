@@ -4,6 +4,8 @@ const nextConfig: NextConfig = {
   experimental: {
     // Match the API file limit plus its multipart allowance.
     proxyClientMaxBodySize: 100_065_536,
+    // Allow a valid 30-second clip to finish tracking and overlay encoding.
+    proxyTimeout: 300_000,
   },
   async rewrites() {
     const apiOrigin = (

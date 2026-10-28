@@ -25,6 +25,8 @@ export default function Workspace() {
     "upload" | "tracking" | "measurement" | null
   >(null);
   const [trackUnavailable, setTrackUnavailable] = useState(false);
+  const [trackNeedsNewObservation, setTrackNeedsNewObservation] =
+    useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("No video uploaded.");
   const dragStart = useRef<{ x: number; y: number } | null>(null);
@@ -67,6 +69,7 @@ export default function Workspace() {
       setTrack(null);
       setMeasurement(null);
       setTrackUnavailable(false);
+      setTrackNeedsNewObservation(false);
       setOverlayUrl("");
       setNotice(
         "Video ready. Drag around the bob on the first frame, or enter target pixels below.",
@@ -107,7 +110,7 @@ export default function Workspace() {
   }
 
   async function runTracking() {
-    if (!observation || busy) return;
+    if (!observation || busy || trackNeedsNewObservation) return;
     setError("");
     if (
       !Object.values(roi).every(Number.isInteger) ||
@@ -128,6 +131,7 @@ export default function Workspace() {
       "Tracking with OpenCV CSRT… Previous completed output stays available.",
     );
     let mayHaveNewTrack = true;
+    let requestOutcomeUnknown = true;
     try {
       const path = `/api/observations/${observation.observation_id}`;
       const response = await fetch(`${path}/tracking`, {
@@ -135,7 +139,8 @@ export default function Workspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(roi),
       });
-      mayHaveNewTrack = response.ok;
+      requestOutcomeUnknown = response.status >= 500;
+      mayHaveNewTrack = response.ok || requestOutcomeUnknown;
       await checkedResponse(response);
       const next: TrackResult = await (
         await checkedResponse(
@@ -151,6 +156,7 @@ export default function Workspace() {
       setMeasurement(null);
       setOverlayUrl(URL.createObjectURL(overlay));
       setTrackUnavailable(false);
+      setTrackNeedsNewObservation(false);
       setNotice(
         next.status === "partial"
           ? "Partial track: some frames are missing. Inspect the overlay and reselect the bob if needed."
@@ -158,13 +164,16 @@ export default function Workspace() {
       );
     } catch (cause) {
       if (mayHaveNewTrack) setTrackUnavailable(true);
+      if (requestOutcomeUnknown) setTrackNeedsNewObservation(true);
       setError(cause instanceof Error ? cause.message : "Tracking failed.");
       setNotice(
-        mayHaveNewTrack
-          ? "Current tracking output could not be retrieved. Previous evidence stays visible, but measurement and exports are disabled. Rerun tracking or upload again to restore a matching trace and overlay."
-          : track
-            ? "Rerun failed. Previous completed trace and overlay remain visible. Correct the target or check the local API, then retry."
-            : "Tracking failed. Correct the target or check the local API, then retry.",
+        requestOutcomeUnknown
+          ? "Tracking did not return a result, so it may still finish in the background. Upload this clip again before measuring; a new observation keeps late output separate from the current track."
+          : mayHaveNewTrack
+            ? "Current tracking output could not be retrieved. Previous evidence stays visible, but measurement and exports are disabled. Rerun tracking or upload again to restore a matching trace and overlay."
+            : track
+              ? "Rerun failed. Previous completed trace and overlay remain visible. Correct the target or check the local API, then retry."
+              : "Tracking failed. Correct the target or check the local API, then retry.",
       );
     } finally {
       setBusy(null);
@@ -172,7 +181,9 @@ export default function Workspace() {
   }
 
   const suggestion = trackUnavailable
-    ? "Recover the current track by rerunning tracking or uploading again before planning a follow-up."
+    ? trackNeedsNewObservation
+      ? "Upload the clip again before planning a follow-up; an earlier tracking request may still finish against the previous observation."
+      : "Recover the current track by rerunning tracking or uploading again before planning a follow-up."
     : track?.status === "partial" ||
         track?.frames.some(
           (frame) => frame.center_x_px === null || frame.center_y_px === null,
@@ -392,7 +403,7 @@ export default function Workspace() {
               <button
                 type="button"
                 className="action-button"
-                disabled={busy !== null}
+                disabled={busy !== null || trackNeedsNewObservation}
                 onClick={() => void runTracking()}
               >
                 {busy === "tracking"
