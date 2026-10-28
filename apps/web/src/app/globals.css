@@ -1,1 +1,62 @@
 @import "tailwindcss";
+
+body {
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+:focus-visible {
+  outline: 3px solid #0f766e;
+  outline-offset: 4px;
+}
+
+.stage-link {
+  display: block;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  background: white;
+  padding: 0.75rem 1rem;
+  color: #134e4a;
+  font-weight: 600;
+}
+
+.stage-link:hover {
+  background: #f0fdfa;
+}
+
+.stage-panel {
+  scroll-margin-top: 1.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: white;
+  padding: 1.5rem;
+  line-height: 1.75;
+}
+
+.stage-panel > * + * {
+  margin-top: 1rem;
+}
+
+.stage-panel h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.stage-number {
+  color: #115e59;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.stage-empty {
+  border-radius: 0.5rem;
+  background: #f1f5f9;
+  padding: 1rem;
+  color: #475569;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
