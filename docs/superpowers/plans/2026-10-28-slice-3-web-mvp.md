@@ -81,12 +81,12 @@
 - Measure: `POST /api/observations/{id}/measure?format=json|csv` with required normalized direction `{motion_axis:{x,y}}`, optional independent `reference_events`, and optional paired `length_m`/`gravity_m_s2`.
 - Trace fields and evidence response follow `docs/API_CONTRACTS.md`.
 
-- [ ] Add keyboard-operable motion-axis drawing in `MeasurementPanel` and map the selected 2D direction to the request.
-- [ ] Add optional manual events with event type, independently entered timestamp and uncertainty; scrubbed overlay frame selects only `evidence_frame_index`.
-- [ ] Add paired optional length/gravity controls and submit theory inputs only when both are valid.
-- [ ] Render trajectory projection and detected cycle picks in `TrajectoryPlot`; render measured period/MAD, manual reference and theoretical results separately, plus warnings, gaps, method and provenance in `MeasurementPanel`.
-- [ ] Render `insufficient_data` without a measured-period value; allow CSV download from the same request parameters and JSON evidence download.
-- [ ] Verify complete measure flow with a synthetic clip, including insufficient data, manual timestamp/frame distinction, and optional theory; verify export responses.
+- [x] Add keyboard-operable motion-axis drawing in `MeasurementPanel` and map the selected 2D direction to the request.
+- [x] Add optional manual events with event type, independently entered timestamp and uncertainty; scrubbed overlay frame selects only `evidence_frame_index`.
+- [x] Add paired optional length/gravity controls and submit theory inputs only when both are valid.
+- [x] Render trajectory projection and detected cycle picks in `TrajectoryPlot`; render measured period/MAD, manual reference and theoretical results separately, plus warnings, gaps, method and provenance in `MeasurementPanel`.
+- [x] Render `insufficient_data` without a measured-period value; allow CSV download from the same request parameters and JSON evidence download.
+- [x] Verify complete measure flow with a synthetic clip, including insufficient data, manual timestamp/frame distinction, and optional theory; verify export responses.
 
 ### Task 4: Next-trial prompt, finish and evidence
 
@@ -104,5 +104,6 @@
 - [ ] Run `npm --prefix apps/web run lint` and `npm --prefix apps/web run build`.
 - [ ] Complete one full browser journey using a synthetic local clip; record exact commands and results in `docs/PROGRESS.md`, including limitations and unverified authentic footage/deployment.
 - [ ] Review diff for accidental media/secrets, run `git diff --check`, then use GStack ship workflow before beginning Slice 4.
+
 
 
