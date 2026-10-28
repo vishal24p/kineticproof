@@ -490,6 +490,31 @@ def test_source_change_during_tracking_is_not_scored(tmp_path, monkeypatch):
     assert row["rater_absolute_error_s"] == ""
 
 
+def test_source_change_then_tracking_exception_is_reported_and_not_scored(tmp_path, monkeypatch):
+    records = [dict(clip_id="clip-0", recording_session_id="session-0", video_path="0.mp4", split="test",
+                    scene_condition="clean", initial_roi=dict(x=1,y=1,width=10,height=10),
+                    motion_axis=dict(x=1,y=0), rights_status="permitted")]
+    labels = [("clip-0", "r1", "leftmost", .1, 1, .01), ("clip-0", "r1", "leftmost", .3, 3, .01)]
+    root, lock_path, _ = _runner_dataset(tmp_path, records, labels)
+
+    def mutate_then_fail(path, *args):
+        path.write_bytes(path.read_bytes() + b"changed")
+        raise RuntimeError("decoder failed after mutation")
+
+    monkeypatch.setattr(benchmark, "track_video", mutate_then_fail)
+    monkeypatch.setattr(benchmark, "measure_trace", lambda *args: pytest.fail("changed source must not be scored"))
+    summary = benchmark.run_benchmark(root, lock_path, tmp_path / "report", "a" * 40)
+    row = next(csv.DictReader((tmp_path / "report" / "results.csv").open(newline="", encoding="utf-8")))
+    detail = json.loads((tmp_path / "report" / "details.jsonl").read_text(encoding="utf-8"))
+    assert summary["tracking_failed_count"] == 1
+    assert summary["scored_clip_count"] == 0
+    assert row["tracking_status"] == "failed"
+    assert row["rater_absolute_error_s"] == ""
+    assert detail["source_changed_during_tracking"] is True
+    assert detail["tracking_error"] == "decoder failed after mutation"
+    assert benchmark._sha256_file(root / "0.mp4") != json.loads(lock_path.read_text())["test_clips"][0]["video_sha256"]
+
+
 def test_output_write_error_fails_without_success_summary(tmp_path, monkeypatch):
     root, lock_path, _ = _runner_dataset(tmp_path)
     output = tmp_path / "report"

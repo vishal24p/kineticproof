@@ -14,7 +14,7 @@ import cv2
 from pydantic import ValidationError
 
 from kineticproof_api.main import MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES
-from kineticproof_api.physics import MeasurementRequest, MotionAxis, ReferenceEvent, measure_trace
+from kineticproof_api.physics import MeasurementRequest, MotionAxis, ReferenceEvent, _manual_intervals, measure_trace
 from kineticproof_api.tracking import InitialROI, inspect_video, track_video
 
 SPLITS = {"demo", "train", "dev", "test"}
@@ -300,14 +300,8 @@ def verify_frozen_inputs(dataset_root, lock_path):
 
 
 def _reference_summary(events):
-    previous, periods = {}, []
-    eligible_types = set()
-    for event in events:
-        if event.event_type in previous:
-            periods.append(event.timestamp_seconds - previous[event.event_type].timestamp_seconds)
-            eligible_types.add(event.event_type)
-        previous[event.event_type] = event
-    return periods, eligible_types
+    intervals = _manual_intervals(events)
+    return [interval.period_seconds for interval in intervals], {interval.event_type for interval in intervals}
 
 
 def _valid_frame_fraction(trace):
@@ -397,6 +391,7 @@ def run_benchmark(dataset_root, lock_path, output_dir, source_commit):
         started = time.monotonic()
         trace = None
         tracking_error = None
+        source_changed = False
         tracking_status = "failed"
         measurement_results = {}
         measurement_errors = {}
@@ -404,6 +399,7 @@ def run_benchmark(dataset_root, lock_path, output_dir, source_commit):
             video_path = record["_resolved_video_path"]
             # load_manifest has inspected this file and populated its validated metadata.
             metadata = record["_video_metadata"]
+            frozen_hash = frozen[clip_id]["video_sha256"]
             with tempfile.NamedTemporaryFile(prefix="kineticproof-", suffix=".mp4", dir=output) as temporary:
                 overlay_path = Path(temporary.name)
             overlay_path.unlink(missing_ok=True)
@@ -411,8 +407,8 @@ def run_benchmark(dataset_root, lock_path, output_dir, source_commit):
                 trace = track_video(video_path, metadata, record["initial_roi"], clip_id, overlay_path)
             finally:
                 overlay_path.unlink(missing_ok=True)
-            frozen_hash = frozen[clip_id]["video_sha256"]
-            if trace.provenance.source_video_sha256 != frozen_hash or _sha256_file(video_path) != frozen_hash:
+                source_changed = _sha256_file(video_path) != frozen_hash
+            if trace.provenance.source_video_sha256 != frozen_hash or source_changed:
                 raise ValueError("Source video changed during tracking; trace hash does not match frozen video")
             tracking_status = trace.status
         except (OSError, ValueError, RuntimeError, cv2.error) as error:
@@ -464,7 +460,7 @@ def run_benchmark(dataset_root, lock_path, output_dir, source_commit):
             totals["insufficient_measurement_count"] += 1
 
         details.append({"clip_id": clip_id, "scene_condition": condition, "tracking_status": tracking_status,
-            "tracking_error": tracking_error, "trace": _json_model(trace),
+            "tracking_error": tracking_error, "source_changed_during_tracking": source_changed, "trace": _json_model(trace),
             "failure_segments": _json_model(getattr(trace, "failures", [])) if trace else [],
             "valid_frame_fraction": _valid_frame_fraction(trace), "raters": per_rater, "latency_s": latency})
         for rater_id, events in rater_events.items():
