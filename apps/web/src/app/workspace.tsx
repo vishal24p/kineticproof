@@ -1,6 +1,8 @@
 "use client";
 
 import { type PointerEvent, useEffect, useRef, useState } from "react";
+import MeasurementPanel from "./measurement-panel";
+import { checkedResponse, type TrackResult } from "./observation-api";
 
 type Observation = {
   observation_id: string;
@@ -10,40 +12,6 @@ type Observation = {
   frame_count: number;
 };
 type Roi = { x: number; y: number; width: number; height: number };
-type TrackResult = {
-  status: "succeeded" | "partial" | "failed";
-  provider_name: string;
-  model_name: string;
-  model_version: string;
-  frames: {
-    frame_index: number;
-    timestamp_seconds: number;
-    center_x_px: number | null;
-    center_y_px: number | null;
-    quality_flags: string[];
-  }[];
-  failures: {
-    frame_index: number;
-    reason: string;
-    recovery_suggestion: string;
-  }[];
-  provenance: { source_video_sha256: string; [key: string]: unknown };
-};
-
-async function checkedResponse(response: Response) {
-  if (response.ok) return response;
-  const body = await response.json().catch(() => null);
-  const detail =
-    typeof body?.detail === "string"
-      ? body.detail
-      : body?.detail
-        ? JSON.stringify(body.detail)
-        : response.statusText;
-  throw new Error(
-    `API ${response.status}: ${detail || "Request failed"}.${response.status === 404 ? " Local observation unavailable; upload again after an API restart." : ""}`,
-  );
-}
-
 export default function Workspace() {
   const [observation, setObservation] = useState<Observation | null>(null);
   const [sourceUrl, setSourceUrl] = useState("");
@@ -483,10 +451,19 @@ export default function Workspace() {
             Inspect motion, cycle picks, measured period, uncertainty, and
             tracking gaps. Reference values and theory appear separately.
           </p>
-          <p className="stage-empty">
-            No measurement yet. Evidence requires a real observation and an
-            inspected track.
-          </p>
+          {track && observation ? (
+            <MeasurementPanel
+              key={overlayUrl}
+              observationId={observation.observation_id}
+              track={track}
+              overlayUrl={overlayUrl}
+            />
+          ) : (
+            <p className="stage-empty">
+              No measurement yet. Evidence requires an observation and an
+              inspected track.
+            </p>
+          )}
         </section>
 
         <section
