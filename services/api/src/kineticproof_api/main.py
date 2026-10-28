@@ -4,9 +4,13 @@ from pathlib import Path
 from tempfile import TemporaryDirectory, TemporaryFile
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, Query, UploadFile
 from starlette.concurrency import run_in_threadpool
-from starlette.responses import FileResponse, JSONResponse
+from starlette.responses import FileResponse, JSONResponse, Response
+
+from kineticproof_api.physics import (
+    MeasurementRequest, MeasurementResult, measure_trace, measurement_csv,
+)
 
 from kineticproof_api.tracking import (
     InitialROI, OverlayError, TrackResult, TrackingRun, UnsupportedContainer,
@@ -165,6 +169,22 @@ def track_observation(observation_id: str, roi: InitialROI) -> dict[str, str | i
 @app.get("/api/observations/{observation_id}/tracks", response_model=TrackResult)
 def get_tracks(observation_id: str) -> TrackResult:
     return get_tracking_run(observation_id).trace
+
+
+@app.post("/api/observations/{observation_id}/measure", response_model=None)
+def measure_observation(
+    observation_id: str,
+    request: MeasurementRequest,
+    response_format: str = Query("json", alias="format", pattern="^(json|csv)$"),
+) -> MeasurementResult | Response:
+    try:
+        result = measure_trace(get_tracking_run(observation_id).trace, request)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    if response_format == "csv":
+        return Response(measurement_csv(result), media_type="text/csv",
+                        headers={"X-Measurement-Status": result.status})
+    return result
 
 
 @app.get("/api/observations/{observation_id}/overlay")

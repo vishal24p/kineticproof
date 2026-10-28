@@ -7,6 +7,7 @@ Create the public GitHub repo (no secrets/private footage), Python `uv` API, fro
 Video validator -> safe temporary storage -> media timestamps -> OpenCV baseline provider -> provider-neutral trace with missing-frame flags -> saved/inspectable overlay. Use real authorized sample or clearly synthetic fixture for plumbing. Acceptance: repeatable timestamped output on a consented clip and explicit failures.
 
 ## Slice 2 — physics and evidence
+**Status:** Implementation complete (Oct 28, 2026). Authentic validation remains pending a consented clip and independently timed events.
 Trajectory extraction -> cycle detection -> multi-cycle period -> uncertainty estimate -> reference/theory separation -> CSV/JSON evidence and quality warnings. Unit tests and independent manual timing. Acceptance: real calculation with traceable inputs and no hidden interpolation.
 
 ## Slice 3 — web MVP

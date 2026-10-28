@@ -6,7 +6,7 @@
 
 **Where to start:** `AGENTS.md` -> `docs/00_INDEX.md` -> `docs/PRODUCT.md` -> `docs/WORKFLOWS.md` -> `docs/ARCHITECTURE.md` -> `docs/IMPLEMENTATION.md`. Read workstream-specific documents before changing that area. No single document is intended to contain everything.
 
-**Project status:** Local API upload, OpenCV CSRT trace and overlay implemented and tested with synthetic media. Web remains a bootstrap. Authentic footage, tracking accuracy, benchmarks, deployment and Meta integration remain unverified.
+**Project status:** Local API upload, OpenCV CSRT trace and overlay, and pendulum period measurement with JSON/CSV evidence are implemented and tested with synthetic media. Web remains a bootstrap. Authentic footage, tracking and measurement accuracy, benchmarks, deployment and Meta integration remain unverified.
 
 **Hackathon:** Meta Global AI Developer Hackathon, Indie Developer track; public GitHub repository and 3-minute demo-video URLs required by the user-inspected submission form. Deadline: Nov 4, 2026, 9:00 PM US Eastern per event; re-confirm time and local conversion at submission. See `docs/HACKATHON_RULES.md` and `docs/SUBMISSION.md`.
 
@@ -36,7 +36,7 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 uv run --project services/api pytest -c services/api/pyproject.toml services/api/tests -q
 ```
 
-The health endpoint returns `{"status":"ok"}`. Local upload, tracking, trace and overlay endpoints are described in [API contracts](docs/API_CONTRACTS.md). Measurement endpoints are not implemented yet.
+The health endpoint returns `{"status":"ok"}`. Local upload, tracking, trace, overlay and period measurement endpoints are described in [API contracts](docs/API_CONTRACTS.md).
 
 Start the web app in another terminal, then open [localhost:3000](http://localhost:3000):
 
