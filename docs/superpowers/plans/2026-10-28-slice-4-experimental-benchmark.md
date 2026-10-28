@@ -65,10 +65,10 @@
 - Store a SHA-256 digest over the canonical lock payload and verify it before scoring; this detects accidental edits, not deliberate recomputation.
 - Resolve Git HEAD and worktree cleanliness in the CLI; freeze only at clean HEAD and refuse an existing lock.
 
-- [ ] Add `test_freeze_is_deterministic_and_never_overwrites`, `test_freeze_requires_test_clips`, `test_lock_stores_relative_input_paths`, `test_run_reloads_locked_source_files`, `test_frozen_test_inputs_must_match`, and `test_dev_only_changes_do_not_invalidate_lock` for lock creation, canonical contents, run-time reload, test media/labels/ROI/axis/condition/split mutation rejection, and permitted dev-only edits; missing stored inputs must fail before scoring.
+- [ ] Add `test_freeze_is_deterministic_and_never_overwrites`, `test_freeze_requires_test_clips`, `test_lock_stores_relative_input_paths`, `test_frozen_test_inputs_must_match`, and `test_dev_only_changes_do_not_invalidate_lock` for lock creation, canonical contents, test media/labels/ROI/axis/condition/split mutation rejection, and permitted dev-only edits.
 - [ ] Add `test_lock_payload_digest_rejects_edits` for altered or malformed lock payloads.
 - [ ] Add `test_lock_path_must_be_outside_repository` for lock files inside the checkout.
-- [ ] Add `test_freeze_and_run_require_locked_clean_commit` for source commit mismatch and dirty checkout refusal at the CLI boundary.
+- [ ] Test the freeze function rejects invalid or missing source commit metadata; defer dirty checkout and source-HEAD enforcement at the CLI boundary to Task 4, when CLI wiring exists.
 - [ ] Implement canonical hashing and lock validation; changed frozen inputs require a new dataset revision/lock path.
 - [ ] Run `uv run --project services/api pytest services/api/tests/test_benchmark.py -q`.
 
@@ -78,11 +78,12 @@
 - Modify: `services/api/src/kineticproof_api/benchmark.py`
 - Test: `services/api/tests/test_benchmark.py`
 
+- [ ] Add `test_run_reloads_locked_source_files`, proving `run` reloads the relative paths from the lock and rejects missing or changed inputs before scoring.
 **Interfaces:**
 - Add `run_benchmark(dataset_root, lock_path, output_dir, source_commit)` and CLI subcommand `run`; resolve the stored relative manifest/label paths, reload both files, and verify the live test records and test labels against the lock before scoring.
 - Use `inspect_video`, `track_video`, and `measure_trace`; create a temporary overlay for tracking and remove it after each clip. Reuse one `TrackResult` per clip for each rater's `MeasurementRequest`.
 - Compare each returned trace's `provenance.source_video_sha256` to the frozen video hash after tracking; reject any mismatch before scoring. Include locked source commit and lock digest in `summary.json`.
-- Emit `results.csv` by retaining the existing template columns and adding `rater_id`, `rater_eligible`, `rater_ineligibility_reason`, `n_reference_intervals`, `rater_reference_period_s`, `reference_period_range_s`, `rater_absolute_error_s`, `clip_median_absolute_error_s`, `tracking_status`, `measurement_status`, `valid_frame_fraction`, and `unavailable_metrics_reason`. Keep unavailable numeric metric fields blank; include a blank-rater `no_reference_annotations` row. Also write `details.jsonl` (trace/provenance/failures and per-rater measurements) and `summary.json`.
+- Emit `results.csv` by retaining the existing template columns and adding `rater_id`, `rater_eligible`, `rater_ineligibility_reason`, _reference_intervals`, `rater_reference_period_s`, `reference_period_range_s`, `rater_absolute_error_s`, `clip_median_absolute_error_s`, `tracking_status`, `measurement_status`, `valid_frame_fraction`, and `unavailable_metrics_reason`. Keep unavailable numeric metric fields blank; include a blank-rater o_reference_annotations` row. Also write `details.jsonl` (trace/provenance/failures and per-rater measurements) and `summary.json`.
 - Summary reports all-test N, failed/partial tracking, insufficient results, missing/ineligible reference, scored clips, and per-condition counts. Per-clip score is median eligible-rater absolute error; overall median and MAD weight clips equally.
 - Per-rater absolute error is `abs(measured_period_seconds - rater_reference_period_seconds)`; relative error is absolute error divided by the rater reference period, times 100.
 - Report per-clip reference-period range as max minus min of eligible raters' median reference periods; set it to null when fewer than two raters are eligible.
@@ -115,7 +116,7 @@
 - Modify: `docs/PROGRESS.md` only with checks actually run
 - Modify: `README.md`
 
-- [ ] Add CLI usage for `freeze` and `run`, stable exit codes, and help text; add `test_cli_help_and_subcommands` using subprocesses and run `uv run --project services/api python -m kineticproof_api.benchmark --help`.
+- [ ] Add CLI usage for `freeze` and `run`, stable exit codes, and help text; add `test_cli_help_and_subcommands` using subprocesses and run `uv run --project services/api python -m kineticproof_api.benchmark --help`.- [ ] Add `test_freeze_and_run_require_locked_clean_commit`, proving the CLI refuses a dirty checkout and a source HEAD different from the lock before freeze or scoring.
 - [ ] Add `test_synthetic_cli_freeze_run_and_mutation_rejection` using a temporary clean Git repo, generated media, and labels; mark its output synthetic and keep all generated files outside the repo.
 - [ ] Keep the existing CSV template columns, add the named per-rater fields, and document blank unsupported metrics plus explicit unavailability reasons, clip-equal aggregation, failure denominators, and freeze policy.
 - [ ] Document that `latency_s` is machine-specific elapsed time for tracking and all rater measurements, excluding validation and report writing.
