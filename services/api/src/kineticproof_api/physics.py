@@ -247,10 +247,11 @@ def measurement_csv(result: MeasurementResult) -> str:
     output = StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=CSV_COLUMNS, lineterminator="\n")
     writer.writeheader()
-    for index, cycle in enumerate(result.cycles, 1):
-        writer.writerow(dict(zip(CSV_COLUMNS, [index, cycle.start_frame_index, cycle.end_frame_index,
-            cycle.start_timestamp_seconds, cycle.end_timestamp_seconds, cycle.period_seconds,
-            cycle.prominence_px, result.measured_period_seconds, result.cycle_mad_seconds,
-            result.source_timing_resolution_seconds, result.manual_reference_period_seconds,
-            result.theoretical_period_seconds, result.provenance.source_video_sha256])))
+    if result.status == "succeeded":
+        for index, cycle in enumerate(result.cycles, 1):
+            writer.writerow(dict(zip(CSV_COLUMNS, [index, cycle.start_frame_index, cycle.end_frame_index,
+                cycle.start_timestamp_seconds, cycle.end_timestamp_seconds, cycle.period_seconds,
+                cycle.prominence_px, result.measured_period_seconds, result.cycle_mad_seconds,
+                result.source_timing_resolution_seconds, result.manual_reference_period_seconds,
+                result.theoretical_period_seconds, result.provenance.source_video_sha256])))
     return output.getvalue()

@@ -85,6 +85,19 @@ def test_insufficient_measurement_returns_status_and_header_only_csv(measurement
     assert len(csv_response.text.splitlines()) == 1
 
 
+def test_one_cycle_insufficient_measurement_csv_has_no_rows(measurement_client):
+    add_observation(measurement_client, "one-cycle", [0, 1, 3, 1, 0, -1, 0, 2, 5, 2, 0])
+    url = "/api/observations/one-cycle/measure"
+
+    result = measurement_client.post(url, json=payload())
+    csv_response = measurement_client.post(f"{url}?format=csv", json=payload())
+
+    assert result.json()["status"] == "insufficient_data"
+    assert len(result.json()["cycles"]) == 1
+    assert csv_response.headers["x-measurement-status"] == "insufficient_data"
+    assert len(csv_response.text.splitlines()) == 1
+
+
 @pytest.mark.parametrize("request_body", [
     {"motion_axis": {"x": 0, "y": 0}},
     {"motion_axis": {"x": 1, "y": 0}, "length_m": 1},
