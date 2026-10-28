@@ -108,6 +108,13 @@ test("retains definite failures and isolates late tracking after a proxy timeout
   });
   await expect(page.getByText("Video ready.", { exact: false })).toBeVisible();
 
+  const runButton = page.getByRole("button", {
+    name: "Run tracking",
+    exact: true,
+  });
+  await runButton.hover();
+  await expect(runButton).toHaveCSS("background-color", "rgb(15, 118, 110)");
+
   const setTarget = async () => {
     await page.getByLabel("Left (x)", { exact: true }).fill("100");
     await page.getByLabel("Top (y)", { exact: true }).fill("100");
@@ -151,6 +158,21 @@ test("retains definite failures and isolates late tracking after a proxy timeout
     await expect(
       page.getByRole("button", { name, exact: true }),
     ).toBeDisabled();
+  const disabledRerun = page.getByRole("button", {
+    name: "Rerun tracking",
+    exact: true,
+  });
+  const disabledBackground = await disabledRerun.evaluate(
+    (button) => getComputedStyle(button).backgroundColor,
+  );
+  const disabledBox = await disabledRerun.boundingBox();
+  if (disabledBox) {
+    await page.mouse.move(
+      disabledBox.x + disabledBox.width / 2,
+      disabledBox.y + disabledBox.height / 2,
+    );
+  }
+  await expect(disabledRerun).toHaveCSS("background-color", disabledBackground);
   await expect.poll(() => lateRevisionPublished).toBe(true);
   for (const name of [...exportButtons, "Rerun tracking"])
     await expect(

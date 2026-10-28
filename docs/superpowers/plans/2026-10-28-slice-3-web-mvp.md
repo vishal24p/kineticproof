@@ -121,3 +121,14 @@
 - [x] Add a repeatable browser test for definite 4xx retaining prior evidence, ambiguous 504 blocking measurement/exports/rerun even after late publication, and fresh-upload recovery.
 - [x] Run the Playwright test locally with existing Biome lint and production build gates.
 - [ ] Confirm the Playwright CI job passes after push; then run `git diff --check` and GStack ship as the final Slice 3 gate.
+
+### Task 6: Action button hover feedback
+
+**User-approved review fix:** GStack design review found `.action-button` lacked pointer hover feedback; user chose a subtle hover color.
+
+**Files:**
+- Modify: `apps/web/src/app/globals.css`
+- Modify: `apps/web/tests/tracking-recovery.spec.ts`
+
+- [x] Add an enabled-button hover tint from the existing teal palette and a browser assertion that verifies the color changes on hover while disabled buttons stay unchanged.
+- [x] Run the focused Playwright test, lint, and production build.

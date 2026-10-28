@@ -110,6 +110,9 @@ input[type="file"] {
   padding: 0.6rem 1rem;
   font-weight: 600;
 }
+.action-button:not(:disabled):hover {
+  background: #0f766e;
+}
 button:disabled,
 input:disabled {
   opacity: 0.6;
