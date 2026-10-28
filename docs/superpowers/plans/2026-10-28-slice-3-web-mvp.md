@@ -60,7 +60,7 @@
 - [ ] Add keyboard-operable video frame ROI selection; convert its displayed rectangle to integer source pixels and reject empty/out-of-bounds boxes before submit.
 - [ ] Submit tracking, fetch trace and annotated overlay; show loading, success, partial, and failure feedback with OpenCV provider identity.
 - [ ] Allow target reselection and rerun; retain and display last successful trace/overlay if rerun fails.
-- [ ] Verify with a generated synthetic clip: upload → choose target → track → inspect overlay; also verify invalid ROI and failed/partial track feedback.
+- [ ] Verify with a generated synthetic clip: upload → choose target → track → inspect overlay; also verify invalid ROI and failed/partial track feedback. Exercise proxy pass-through with a valid synthetic MP4 close to (but within) the 100,000,000-byte file cap when practical.
 
 ### Task 3: Axis selection, measurement and evidence
 
