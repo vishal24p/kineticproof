@@ -4,7 +4,7 @@
 
 ### Added
 
-- Upload a short MP4 or MOV clip, select a target in its first frame, and view an OpenCV tracking trace with an annotated video.
+- Use the local API to upload a short MP4 or MOV clip, provide a target box from its first frame, and retrieve a timestamped OpenCV trace plus annotated video. See [API contracts](docs/API_CONTRACTS.md).
 - See source timestamps and explicit tracking failures in the trace; failed reruns preserve the last successful result.
 - Validate upload size, duration, media timestamps, and video container brands before accepting a clip.
 

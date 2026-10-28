@@ -28,4 +28,4 @@ A tracking provider consumes an approved video asset, validated frame metadata, 
 Synthetic tests verify this mapping and failure plumbing. They do not establish accuracy on authentic experimental footage. CSRT is an OpenCV tracker; no Meta model is used.
 
 ## Accept
-One authentic clip produces a timestamped trace and visible overlay; schema-validation tests cover missing frames and out-of-order observations. Corrupt/bad clips fail transparently.
+Acceptance: one authentic clip produces a timestamped trace and visible overlay. Synthetic tests cover failed tracker updates, missing or nonmonotonic PTS, and corrupt or unsupported video rejection; authentic-footage accuracy remains unverified.
