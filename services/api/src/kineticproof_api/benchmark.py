@@ -1,8 +1,10 @@
 """Private, local benchmark input validation."""
 
 import csv
+import hashlib
 import json
 from pathlib import Path
+import re
 
 import cv2
 from pydantic import ValidationError
@@ -16,6 +18,8 @@ CONDITIONS = {"clean", "static_clutter", "moving_background"}
 MANIFEST_FIELDS = {"clip_id", "recording_session_id", "video_path", "split", "scene_condition", "initial_roi", "motion_axis", "rights_status"}
 EVENT_FIELDS = {"clip_id", "rater_id", "event_type", "timestamp_seconds", "evidence_frame_index", "uncertainty_seconds"}
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+LOCK_VERSION = 1
+BENCHMARK_CONFIGURATION = {"tracker": "opencv_csrt", "measurement": "pendulum_period_from_reference_events"}
 
 
 def _inside(path: Path, root: Path) -> bool:
@@ -174,3 +178,118 @@ def validate_dataset(manifest, labels, dataset_root) -> None:
                     raise ValueError(f"Evidence frame index out of range for clip {clip_id}, rater {rater_id}")
                 if event.timestamp_seconds > last_timestamp:
                     raise ValueError(f"Event timestamp exceeds clip duration for clip {clip_id}, rater {rater_id}")
+
+
+def _canonical_json(value) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _canonical_test_inputs(manifest, labels, dataset_root):
+    root = Path(dataset_root).resolve()
+    test_records = []
+    for record in sorted((item for item in manifest if item["split"] == "test"), key=lambda item: item["clip_id"]):
+        test_records.append({
+            "clip_id": record["clip_id"],
+            "recording_session_id": record["recording_session_id"],
+            "video_path": record["video_path"],
+            "split": record["split"],
+            "scene_condition": record["scene_condition"],
+            "initial_roi": record["initial_roi"].model_dump(mode="json"),
+            "motion_axis": record["motion_axis"].model_dump(mode="json"),
+            "rights_status": record["rights_status"],
+            "video_sha256": _sha256_file(record["_resolved_video_path"]),
+        })
+    test_ids = {record["clip_id"] for record in test_records}
+    label_rows = []
+    for clip_id in sorted(test_ids):
+        for rater_id in sorted(labels.get(clip_id, {})):
+            for event in labels[clip_id][rater_id]:
+                label_rows.append({
+                    "clip_id": clip_id,
+                    "rater_id": rater_id,
+                    "event_type": event.event_type,
+                    "timestamp_seconds": event.timestamp_seconds,
+                    "evidence_frame_index": event.evidence_frame_index,
+                    "uncertainty_seconds": event.uncertainty_seconds,
+                    "notes": event.notes,
+                })
+    return test_records, label_rows
+
+
+def _lock_payload(dataset_root, manifest_path, labels_path, source_commit):
+    root, manifest_file = _private_path(manifest_path, dataset_root, "manifest path")
+    _, labels_file = _private_path(labels_path, root, "event-label path")
+    manifest = load_manifest(manifest_file, root)
+    labels = load_event_labels(labels_file, root, {record["clip_id"] for record in manifest})
+    validate_dataset(manifest, labels, root)
+    test_records, label_rows = _canonical_test_inputs(manifest, labels, root)
+    if not test_records:
+        raise ValueError("Dataset must contain at least one test clip")
+    sessions = {record["recording_session_id"]: record["split"] for record in manifest}
+    return {
+        "version": LOCK_VERSION,
+        "inputs": {
+            "manifest_path": manifest_file.relative_to(root).as_posix(),
+            "labels_path": labels_file.relative_to(root).as_posix(),
+        },
+        "source_commit": source_commit,
+        "configuration": BENCHMARK_CONFIGURATION,
+        "session_splits": dict(sorted(sessions.items())),
+        "test_clips": test_records,
+        "test_label_rows": label_rows,
+        "test_label_rows_sha256": hashlib.sha256(_canonical_json(label_rows)).hexdigest(),
+    }
+
+
+def freeze_dataset(dataset_root, manifest_path, labels_path, lock_path, source_commit):
+    if not isinstance(source_commit, str) or re.fullmatch(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})", source_commit) is None:
+        raise ValueError("source_commit must be a full 40- or 64-character hexadecimal Git commit")
+    lock_file = Path(lock_path).resolve()
+    if _inside(lock_file, REPOSITORY_ROOT):
+        raise ValueError("lock_path must be outside the repository checkout")
+    payload = _lock_payload(dataset_root, manifest_path, labels_path, source_commit.lower())
+    lock = {**payload, "payload_sha256": hashlib.sha256(_canonical_json(payload)).hexdigest()}
+    try:
+        with lock_file.open("x", encoding="utf-8", newline="\n") as target:
+            json.dump(lock, target, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False)
+            target.write("\n")
+    except FileExistsError as error:
+        raise ValueError(f"Lock file already exists: {lock_file}") from error
+    return lock
+
+
+def verify_frozen_inputs(dataset_root, lock_path):
+    lock_file = Path(lock_path).resolve()
+    if _inside(lock_file, REPOSITORY_ROOT):
+        raise ValueError("lock_path must be outside the repository checkout")
+    try:
+        lock = json.loads(lock_file.read_text(encoding="utf-8"))
+        if not isinstance(lock, dict):
+            raise ValueError("Lock must be a JSON object")
+        payload = {key: value for key, value in lock.items() if key != "payload_sha256"}
+        expected_digest = hashlib.sha256(_canonical_json(payload)).hexdigest()
+        if lock.get("payload_sha256") != expected_digest:
+            raise ValueError("Lock payload digest does not match")
+        if lock.get("version") != LOCK_VERSION:
+            raise ValueError("Unsupported benchmark lock version")
+        if not isinstance(lock.get("source_commit"), str) or re.fullmatch(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})", lock["source_commit"]) is None:
+            raise ValueError("Lock source_commit metadata is invalid")
+        inputs = lock["inputs"]
+        manifest_path, labels_path = inputs["manifest_path"], inputs["labels_path"]
+        if not isinstance(manifest_path, str) or not isinstance(labels_path, str):
+            raise ValueError("Lock input paths must be relative strings")
+        root = Path(dataset_root).resolve()
+        current = _lock_payload(root, root / manifest_path, root / labels_path, lock["source_commit"])
+        if current != payload:
+            raise ValueError("Frozen test inputs or session split map changed; create a new lock")
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
+        raise ValueError(f"Cannot verify benchmark lock: {error}") from error
+    return lock

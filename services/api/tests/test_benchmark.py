@@ -137,3 +137,113 @@ def test_offset_source_timestamps_are_checked_against_final_pts(tmp_path, monkey
     monkeypatch.setattr(benchmark, "_last_video_timestamp", lambda path: 10.5)
     labels = {"clip-a": {"r1": [benchmark.ReferenceEvent(event_type="leftmost", timestamp_seconds=10.4, evidence_frame_index=4, uncertainty_seconds=0.01)]}}
     validate_dataset(records, labels, root)
+
+
+def _freeze_inputs(root, *, dev=False):
+    records = [
+        dict(clip_id="test-clip", recording_session_id="test-session", video_path="clip.mp4", split="test", scene_condition="clean", initial_roi=dict(x=1,y=1,width=10,height=10), motion_axis=dict(x=1,y=0), rights_status="permitted"),
+    ]
+    if dev:
+        records.append(dict(clip_id="dev-clip", recording_session_id="dev-session", video_path="clip.mp4", split="dev", scene_condition="clean", initial_roi=dict(x=1,y=1,width=10,height=10), motion_axis=dict(x=1,y=0), rights_status="permitted"))
+    manifest = root / "manifest.json"
+    manifest.write_text(json.dumps(records), encoding="utf-8")
+    labels = root / "events.csv"
+    labels.write_text("clip_id,rater_id,event_type,timestamp_seconds,evidence_frame_index,uncertainty_seconds,notes\ntest-clip,r1,leftmost,0.1,1,0.01,first\ntest-clip,r1,leftmost,0.4,4,0.02,last\n", encoding="utf-8")
+    return manifest, labels
+
+
+def test_freeze_is_deterministic_and_never_overwrites(tmp_path):
+    root = dataset(tmp_path)
+    manifest, labels = _freeze_inputs(root)
+    lock = tmp_path / "lock.json"
+    first = benchmark.freeze_dataset(root, manifest, labels, lock, "a" * 40)
+    lock.unlink()
+    second = benchmark.freeze_dataset(root, manifest, labels, lock, "a" * 40)
+    assert first == second
+    assert json.loads(lock.read_text()) == first
+    with pytest.raises(ValueError, match="already exists"):
+        benchmark.freeze_dataset(root, manifest, labels, lock, "a" * 40)
+
+
+def test_freeze_requires_test_clips(tmp_path):
+    root = dataset(tmp_path)
+    record = json.loads((root / "manifest.json").read_text())[0]
+    record["split"] = "dev"
+    (root / "manifest.json").write_text(json.dumps([record]))
+    labels = root / "events.csv"
+    labels.write_text("clip_id,rater_id,event_type,timestamp_seconds,evidence_frame_index,uncertainty_seconds\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="test clip"):
+        benchmark.freeze_dataset(root, root / "manifest.json", labels, tmp_path / "lock.json", "a" * 40)
+
+
+def test_lock_stores_relative_input_paths(tmp_path):
+    root = dataset(tmp_path)
+    manifest, labels = _freeze_inputs(root)
+    lock = benchmark.freeze_dataset(root, manifest, labels, tmp_path / "lock.json", "a" * 40)
+    assert lock["inputs"] == {"manifest_path": "manifest.json", "labels_path": "events.csv"}
+    assert lock["session_splits"] == {"test-session": "test"}
+    assert lock["test_clips"][0]["video_sha256"] == benchmark._sha256_file(root / "clip.mp4")
+    assert lock["test_label_rows"][0]["timestamp_seconds"] == 0.1
+    assert lock["test_label_rows_sha256"] == benchmark.hashlib.sha256(benchmark._canonical_json(lock["test_label_rows"])).hexdigest()
+    assert "private" not in json.dumps(lock)
+
+
+@pytest.mark.parametrize("mutation", ["media", "labels", "roi", "axis", "condition", "split"])
+def test_frozen_test_inputs_must_match(tmp_path, mutation):
+    root = dataset(tmp_path)
+    manifest, labels = _freeze_inputs(root)
+    lock_path = tmp_path / "lock.json"
+    benchmark.freeze_dataset(root, manifest, labels, lock_path, "a" * 40)
+    if mutation == "media":
+        video(root / "clip.mp4", frames=7)
+    elif mutation == "labels":
+        labels.write_text(labels.read_text().replace(",0.01,first", ",0.03,first"))
+    else:
+        record = json.loads(manifest.read_text())[0]
+        if mutation == "roi": record["initial_roi"]["x"] = 2
+        if mutation == "axis": record["motion_axis"] = {"x": 0, "y": 1}
+        if mutation == "condition": record["scene_condition"] = "static_clutter"
+        if mutation == "split": record["split"] = "dev"
+        manifest.write_text(json.dumps([record]))
+    with pytest.raises(ValueError, match="frozen|lock|test"):
+        benchmark.verify_frozen_inputs(root, lock_path)
+
+
+def test_dev_only_changes_do_not_invalidate_lock(tmp_path):
+    root = dataset(tmp_path)
+    manifest, labels = _freeze_inputs(root, dev=True)
+    lock_path = tmp_path / "lock.json"
+    benchmark.freeze_dataset(root, manifest, labels, lock_path, "a" * 40)
+    labels.write_text(labels.read_text() + "dev-clip,r2,leftmost,0.2,2,0.01,dev only\n")
+    assert benchmark.verify_frozen_inputs(root, lock_path)["source_commit"] == "a" * 40
+
+
+@pytest.mark.parametrize("malformed", [False, True])
+def test_lock_payload_digest_rejects_edits(tmp_path, malformed):
+    root = dataset(tmp_path)
+    manifest, labels = _freeze_inputs(root)
+    lock_path = tmp_path / "lock.json"
+    benchmark.freeze_dataset(root, manifest, labels, lock_path, "a" * 40)
+    if malformed:
+        lock_path.write_text("{")
+    else:
+        payload = json.loads(lock_path.read_text())
+        payload["test_clips"][0]["clip_id"] = "edited"
+        lock_path.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="digest|verify"):
+        benchmark.verify_frozen_inputs(root, lock_path)
+
+
+def test_lock_path_must_be_outside_repository(tmp_path):
+    root = dataset(tmp_path)
+    manifest, labels = _freeze_inputs(root)
+    with pytest.raises(ValueError, match="outside the repository"):
+        benchmark.freeze_dataset(root, manifest, labels, REPO / "benchmark-lock.json", "a" * 40)
+
+
+@pytest.mark.parametrize("source_commit", [None, "", "not-a-commit", "a" * 39, "g" * 40])
+def test_freeze_rejects_invalid_source_commit(tmp_path, source_commit):
+    root = dataset(tmp_path)
+    manifest, labels = _freeze_inputs(root)
+    with pytest.raises(ValueError, match="source_commit"):
+        benchmark.freeze_dataset(root, manifest, labels, tmp_path / "lock.json", source_commit)
