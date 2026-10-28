@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the API unchanged and call its existing contracts through a Next.js same-origin rewrite to the localhost FastAPI service. Keep one guided workspace in the existing app, with local component state and temporary browser object URLs; observations remain process-local.
 
-**Tech Stack:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Biome 2; FastAPI contracts already implemented. No new dependencies.
+**Tech Stack:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Biome 2, Playwright Test; FastAPI contracts already implemented.
 
 **Spec:** `docs/superpowers/specs/2026-10-28-slice-3-web-mvp-design.md`
 
@@ -17,7 +17,7 @@
 - Use OpenCV CSRT outputs honestly; label provider and preserve partial/gap/insufficient states.
 - Encode annotated MP4 overlays with browser-playable VP9 (`VP90`) because the existing `mp4v` overlay is rejected by Chromium; preserve the `video/mp4` route and add no codec dependency.
 - Manual reference event time and uncertainty are entered independently from video PTS; scrubbed video frame supplies evidence index only.
-- No fabricated measurements, persistence, auth, new provider, or new dependency.
+- No fabricated measurements, persistence, auth, or new provider. Playwright Test is the single user-approved development dependency for a repeatable frontend regression gate.
 - Keep user media local; use synthetic clips for verification and do not commit video files.
 
 ## Review Focus
@@ -108,3 +108,16 @@
 - [x] Complete one full browser journey using a synthetic local clip; verify next-trial prompts for partial/gapped, insufficient, and successful evidence; record exact commands and results in `docs/PROGRESS.md`, including limitations and unverified authentic footage/deployment.
 - [x] Update README and implementation roadmap to describe the local web journey and mark Slice 3 complete; retain Slice 6 as the deployment milestone.
 - [ ] Review diff for accidental media/secrets, run `git diff --check`, then use GStack ship workflow before beginning Slice 4.
+
+### Task 5: CI regression for ambiguous tracking outcomes
+
+**User-approved addition:** GStack coverage review found the browser regression was only in ignored local SDD artifacts (77% assessed coverage); user approved adding Playwright Test and CI.
+
+**Files:**
+- Modify: `apps/web/package.json` and lockfile
+- Create: Playwright test/config for tracking timeout recovery
+- Modify: `.github/workflows/ci.yml`
+
+- [x] Add a repeatable browser test for definite 4xx retaining prior evidence, ambiguous 504 blocking measurement/exports/rerun even after late publication, and fresh-upload recovery.
+- [x] Run the Playwright test locally with existing Biome lint and production build gates.
+- [ ] Confirm the Playwright CI job passes after push; then run `git diff --check` and GStack ship as the final Slice 3 gate.
