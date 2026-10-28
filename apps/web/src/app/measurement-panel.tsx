@@ -42,6 +42,11 @@ type MeasurementResult = {
   manual_reference_intervals: Record<string, string | number>[];
   provenance: Record<string, string>;
 };
+export type MeasurementSummary = Pick<
+  MeasurementResult,
+  "status" | "gap_ranges"
+>;
+
 type Axis = { startX: number; startY: number; endX: number; endY: number };
 
 function download(blob: Blob, filename: string) {
@@ -59,12 +64,14 @@ export default function MeasurementPanel({
   overlayUrl,
   disabled,
   onBusyChange,
+  onResult,
 }: {
   observationId: string;
   track: TrackResult;
   overlayUrl: string;
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
+  onResult: (result: MeasurementSummary) => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const dragging = useRef(false);
@@ -202,6 +209,7 @@ export default function MeasurementPanel({
         )
       ).json();
       setEvidence({ result, request });
+      onResult({ status: result.status, gap_ranges: result.gap_ranges });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Measurement failed.");
     } finally {

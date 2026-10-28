@@ -1,7 +1,7 @@
 "use client";
 
 import { type PointerEvent, useEffect, useRef, useState } from "react";
-import MeasurementPanel from "./measurement-panel";
+import MeasurementPanel, { type MeasurementSummary } from "./measurement-panel";
 import { checkedResponse, type TrackResult } from "./observation-api";
 
 type Observation = {
@@ -17,6 +17,9 @@ export default function Workspace() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [roi, setRoi] = useState<Roi>({ x: 0, y: 0, width: 0, height: 0 });
   const [track, setTrack] = useState<TrackResult | null>(null);
+  const [measurement, setMeasurement] = useState<MeasurementSummary | null>(
+    null,
+  );
   const [overlayUrl, setOverlayUrl] = useState("");
   const [busy, setBusy] = useState<
     "upload" | "tracking" | "measurement" | null
@@ -62,6 +65,7 @@ export default function Workspace() {
       setSourceUrl(URL.createObjectURL(file));
       setRoi({ x: 0, y: 0, width: 0, height: 0 });
       setTrack(null);
+      setMeasurement(null);
       setTrackUnavailable(false);
       setOverlayUrl("");
       setNotice(
@@ -144,6 +148,7 @@ export default function Workspace() {
         )
       ).blob();
       setTrack(next);
+      setMeasurement(null);
       setOverlayUrl(URL.createObjectURL(overlay));
       setTrackUnavailable(false);
       setNotice(
@@ -165,6 +170,20 @@ export default function Workspace() {
       setBusy(null);
     }
   }
+
+  const suggestion = trackUnavailable
+    ? "Recover the current track by rerunning tracking or uploading again before planning a follow-up."
+    : track?.status === "partial" ||
+        track?.frames.some(
+          (frame) => frame.center_x_px === null || frame.center_y_px === null,
+        ) ||
+        (measurement?.gap_ranges.length ?? 0) > 0
+      ? "Recapture with a fixed camera, better lighting and the whole bob visible against a plain background. Inspect the new track for missing frames before comparing periods."
+      : measurement?.status === "insufficient_data"
+        ? "Record a longer clip with several complete swings, within the 30-second limit. Inspect the motion axis and track, then measure again; at least two complete detected cycles are required."
+        : measurement?.status === "succeeded"
+          ? "Change only the pendulum length. Keep the bob, small release angle, camera and timing method the same; record the new length, then compare repeated measured periods and their cycle spread."
+          : "Complete an observation, inspect its track and measure its period before choosing a follow-up trial.";
 
   return (
     <main className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-16">
@@ -216,7 +235,7 @@ export default function Workspace() {
         </ol>
       </nav>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section
           id="investigate"
           aria-labelledby="investigate-title"
@@ -467,6 +486,7 @@ export default function Workspace() {
               track={track}
               overlayUrl={overlayUrl}
               disabled={busy !== null || trackUnavailable}
+              onResult={setMeasurement}
               onBusyChange={(working) =>
                 setBusy(working ? "measurement" : null)
               }
@@ -490,9 +510,9 @@ export default function Workspace() {
             Use the evidence and its limitations to plan a controlled follow-up
             investigation.
           </p>
-          <p className="stage-empty">
-            Complete an observation before choosing the next trial. A suggested
-            plan is separate from a measured result.
+          <p className="stage-empty" role="status" aria-live="polite">
+            <strong>Suggestion, not a measured result.</strong> Deterministic
+            template. {suggestion}
           </p>
         </section>
       </div>
