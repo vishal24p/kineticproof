@@ -107,7 +107,7 @@
 - [x] Run `npm --prefix apps/web run lint` and `npm --prefix apps/web run build`.
 - [x] Complete one full browser journey using a synthetic local clip; verify next-trial prompts for partial/gapped, insufficient, and successful evidence; record exact commands and results in `docs/PROGRESS.md`, including limitations and unverified authentic footage/deployment.
 - [x] Update README and implementation roadmap to describe the local web journey and mark Slice 3 complete; retain Slice 6 as the deployment milestone.
-- [ ] Review diff for accidental media/secrets, run `git diff --check`, then use GStack ship workflow before beginning Slice 4.
+- [x] Review diff for accidental media/secrets, run `git diff --check`, complete GStack ship workflow, and keep Slice 4 as the next milestone.
 
 ### Task 5: CI regression for ambiguous tracking outcomes
 
@@ -120,7 +120,7 @@
 
 - [x] Add a repeatable browser test for definite 4xx retaining prior evidence, ambiguous 504 blocking measurement/exports/rerun even after late publication, and fresh-upload recovery.
 - [x] Run the Playwright test locally with existing Biome lint and production build gates.
-- [ ] Confirm the Playwright CI job passes after push; then run `git diff --check` and GStack ship as the final Slice 3 gate.
+- [x] Confirm the Playwright CI job passes after push; run `git diff --check` and complete GStack ship as the final Slice 3 gate.
 
 ### Task 6: Action button hover feedback
 
