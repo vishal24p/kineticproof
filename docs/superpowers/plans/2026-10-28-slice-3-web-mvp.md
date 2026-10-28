@@ -108,7 +108,3 @@
 - [x] Complete one full browser journey using a synthetic local clip; verify next-trial prompts for partial/gapped, insufficient, and successful evidence; record exact commands and results in `docs/PROGRESS.md`, including limitations and unverified authentic footage/deployment.
 - [x] Update README and implementation roadmap to describe the local web journey and mark Slice 3 complete; retain Slice 6 as the deployment milestone.
 - [ ] Review diff for accidental media/secrets, run `git diff --check`, then use GStack ship workflow before beginning Slice 4.
-
-
-
-
