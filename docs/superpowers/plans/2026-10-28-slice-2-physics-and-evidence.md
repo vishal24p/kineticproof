@@ -168,4 +168,3 @@ git commit -m "docs: record physics measurement contract"
 - JSON and CSV responses represent the same request and calculation.
 - Manual reference and theoretical values remain separate from the measured period.
 - Tests and local runtime prove plumbing only; no authentic-footage accuracy claim is made.
-

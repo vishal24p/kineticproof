@@ -86,4 +86,3 @@ Turn a completed local tracking trace into an inspectable pendulum period measur
 - Theoretical comparison is omitted unless both length and gravity are supplied.
 - Insufficient cycles return a successful HTTP response with an explicit `insufficient_data` result so users can inspect warnings and CSV evidence.
 - Measurement output is returned per request and not cached in memory.
-
