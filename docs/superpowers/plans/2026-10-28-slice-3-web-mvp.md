@@ -61,12 +61,12 @@
 - API keeps previous successful tracking pair after a failed rerun.
 - Overlay remains served as `video/mp4`; encode it using OpenCV's `VP90` MP4 writer so Chromium can inspect it in-page.
 
-- [ ] Add labelled video upload with client-side format/size feedback and render server validation errors; verify unsupported file and API 413/415 paths.
-- [ ] Add keyboard-operable video frame ROI selection; convert its displayed rectangle to integer source pixels and reject empty/out-of-bounds boxes before submit.
-- [ ] Submit tracking, fetch trace and annotated overlay; show loading, success, partial, and failure feedback with OpenCV provider identity.
-- [ ] Allow target reselection and rerun; retain and display last successful trace/overlay if rerun fails.
-- [ ] Change overlay encoding from `mp4v` to `VP90` and add a focused API regression asserting the generated MP4 contains a browser-decodable video stream.
-- [ ] Document overlay video codec and verify through generated synthetic media: upload → choose target → track → inspect overlay; also verify invalid ROI and failed/partial track feedback. Exercise proxy pass-through with a valid synthetic MP4 close to (but within) the 100,000,000-byte file cap when practical.
+- [x] Add labelled video upload with client-side format/size feedback and render server validation errors; verify unsupported file and API 413/415 paths.
+- [x] Add keyboard-operable video frame ROI selection; convert its displayed rectangle to integer source pixels and reject empty/out-of-bounds boxes before submit.
+- [x] Submit tracking, fetch trace and annotated overlay; show loading, success, partial, and failure feedback with OpenCV provider identity.
+- [x] Allow target reselection and rerun; retain and display last successful trace/overlay if rerun fails.
+- [x] Change overlay encoding from `mp4v` to `VP90` and add a focused API regression asserting the generated MP4 contains a browser-decodable video stream.
+- [x] Document overlay video codec and verify through generated synthetic media: upload → choose target → track → inspect overlay; also verify invalid ROI and failed/partial track feedback. Exercise proxy pass-through with a valid synthetic MP4 close to (but within) the 100,000,000-byte file cap when practical.
 
 ### Task 3: Axis selection, measurement and evidence
 
@@ -101,4 +101,5 @@
 - [ ] Run `npm --prefix apps/web run lint` and `npm --prefix apps/web run build`.
 - [ ] Complete one full browser journey using a synthetic local clip; record exact commands and results in `docs/PROGRESS.md`, including limitations and unverified authentic footage/deployment.
 - [ ] Review diff for accidental media/secrets, run `git diff --check`, then use GStack ship workflow before beginning Slice 4.
+
 
