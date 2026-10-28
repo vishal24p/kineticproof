@@ -51,7 +51,7 @@ npm --prefix apps/web run build
 npm --prefix apps/web run lint
 ```
 
-The web app uses Biome for linting and formatting checks.
+The web app uses Biome for linting and formatting checks. Its dev and production servers bind to `127.0.0.1` so the API proxy stays local to this machine.
 
 Use the four-stage local workspace:
 
