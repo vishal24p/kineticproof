@@ -18,7 +18,10 @@ export default function Workspace() {
   const [roi, setRoi] = useState<Roi>({ x: 0, y: 0, width: 0, height: 0 });
   const [track, setTrack] = useState<TrackResult | null>(null);
   const [overlayUrl, setOverlayUrl] = useState("");
-  const [busy, setBusy] = useState<"upload" | "tracking" | null>(null);
+  const [busy, setBusy] = useState<
+    "upload" | "tracking" | "measurement" | null
+  >(null);
+  const [trackUnavailable, setTrackUnavailable] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("No video uploaded.");
   const dragStart = useRef<{ x: number; y: number } | null>(null);
@@ -36,7 +39,7 @@ export default function Workspace() {
   );
 
   async function upload(file: File | undefined) {
-    if (!file) return;
+    if (!file || busy) return;
     setError("");
     if (!/\.(mp4|mov)$/i.test(file.name)) {
       setError("Choose an MP4 or MOV file.");
@@ -59,6 +62,7 @@ export default function Workspace() {
       setSourceUrl(URL.createObjectURL(file));
       setRoi({ x: 0, y: 0, width: 0, height: 0 });
       setTrack(null);
+      setTrackUnavailable(false);
       setOverlayUrl("");
       setNotice(
         "Video ready. Drag around the bob on the first frame, or enter target pixels below.",
@@ -99,7 +103,7 @@ export default function Workspace() {
   }
 
   async function runTracking() {
-    if (!observation) return;
+    if (!observation || busy) return;
     setError("");
     if (
       !Object.values(roi).every(Number.isInteger) ||
@@ -119,15 +123,16 @@ export default function Workspace() {
     setNotice(
       "Tracking with OpenCV CSRT… Previous completed output stays available.",
     );
+    let mayHaveNewTrack = true;
     try {
       const path = `/api/observations/${observation.observation_id}`;
-      await checkedResponse(
-        await fetch(`${path}/tracking`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(roi),
-        }),
-      );
+      const response = await fetch(`${path}/tracking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(roi),
+      });
+      mayHaveNewTrack = response.ok;
+      await checkedResponse(response);
       const next: TrackResult = await (
         await checkedResponse(
           await fetch(`${path}/tracks`, { cache: "no-store" }),
@@ -140,17 +145,21 @@ export default function Workspace() {
       ).blob();
       setTrack(next);
       setOverlayUrl(URL.createObjectURL(overlay));
+      setTrackUnavailable(false);
       setNotice(
         next.status === "partial"
           ? "Partial track: some frames are missing. Inspect the overlay and reselect the bob if needed."
           : "Tracking completed. Inspect the overlay; reselect the bob and rerun if the target is wrong.",
       );
     } catch (cause) {
+      if (mayHaveNewTrack) setTrackUnavailable(true);
       setError(cause instanceof Error ? cause.message : "Tracking failed.");
       setNotice(
-        track
-          ? "Rerun failed. Previous completed trace and overlay remain visible. Correct the target or check the local API, then retry."
-          : "Tracking failed. Correct the target or check the local API, then retry.",
+        mayHaveNewTrack
+          ? "Current tracking output could not be retrieved. Previous evidence stays visible, but measurement and exports are disabled. Rerun tracking or upload again to restore a matching trace and overlay."
+          : track
+            ? "Rerun failed. Previous completed trace and overlay remain visible. Correct the target or check the local API, then retry."
+            : "Tracking failed. Correct the target or check the local API, then retry.",
       );
     } finally {
       setBusy(null);
@@ -457,6 +466,10 @@ export default function Workspace() {
               observationId={observation.observation_id}
               track={track}
               overlayUrl={overlayUrl}
+              disabled={busy !== null || trackUnavailable}
+              onBusyChange={(working) =>
+                setBusy(working ? "measurement" : null)
+              }
             />
           ) : (
             <p className="stage-empty">

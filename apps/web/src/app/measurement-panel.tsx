@@ -57,10 +57,14 @@ export default function MeasurementPanel({
   observationId,
   track,
   overlayUrl,
+  disabled,
+  onBusyChange,
 }: {
   observationId: string;
   track: TrackResult;
   overlayUrl: string;
+  disabled: boolean;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const dragging = useRef(false);
@@ -78,7 +82,12 @@ export default function MeasurementPanel({
   const [events, setEvents] = useState<ReferenceEvent[]>([]);
   const [length, setLength] = useState("");
   const [gravity, setGravity] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setWorking] = useState(false);
+  const blocked = busy || disabled;
+  function setBusy(working: boolean) {
+    setWorking(working);
+    onBusyChange(working);
+  }
   const [error, setError] = useState("");
   const [evidence, setEvidence] = useState<{
     result: MeasurementResult;
@@ -100,7 +109,7 @@ export default function MeasurementPanel({
     };
   }
   function move(event: PointerEvent<HTMLDivElement>) {
-    if (!dragging.current) return;
+    if (!dragging.current || blocked) return;
     const end = point(event);
     setAxis((current) => ({ ...current, endX: end.x, endY: end.y }));
   }
@@ -140,6 +149,7 @@ export default function MeasurementPanel({
     setManualTime("");
   }
   async function measure() {
+    if (blocked) return;
     setError("");
     const x = (axis.endX - axis.startX) * (video.current?.videoWidth ?? 0);
     const y = (axis.endY - axis.startY) * (video.current?.videoHeight ?? 0);
@@ -199,7 +209,7 @@ export default function MeasurementPanel({
     }
   }
   async function exportCsv() {
-    if (!evidence) return;
+    if (!evidence || blocked) return;
     setBusy(true);
     setError("");
     try {
@@ -231,7 +241,7 @@ export default function MeasurementPanel({
         aria-label="Motion axis selection"
         aria-describedby="axis-help"
         onPointerDown={(event) => {
-          if (busy || event.button !== 0) return;
+          if (blocked || event.button !== 0) return;
           event.currentTarget.setPointerCapture(event.pointerId);
           dragging.current = true;
           const start = point(event);
@@ -281,7 +291,7 @@ export default function MeasurementPanel({
           <circle cx={axis.startX} cy={axis.startY} r="1.5" fill="#facc15" />
         </svg>
       </div>
-      <fieldset className="roi-fields" disabled={busy}>
+      <fieldset className="roi-fields" disabled={blocked}>
         <legend>Motion axis endpoints (%) · dot marks start</legend>
         {(["startX", "startY", "endX", "endY"] as const).map((key) => (
           <label key={key}>
@@ -323,10 +333,10 @@ export default function MeasurementPanel({
           max={track.frames.length - 1}
           step="1"
           value={framePosition}
-          disabled={busy}
+          disabled={blocked}
           onChange={(event) => scrub(Number(event.target.value))}
         />
-        <fieldset className="roi-fields" disabled={busy}>
+        <fieldset className="roi-fields" disabled={blocked}>
           <legend>Manual event inputs</legend>
           <label>
             Event type
@@ -364,7 +374,7 @@ export default function MeasurementPanel({
         <button
           type="button"
           className="action-button"
-          disabled={busy}
+          disabled={blocked}
           onClick={addEvent}
         >
           Add manual event
@@ -379,7 +389,7 @@ export default function MeasurementPanel({
               {event.evidence_frame_index}{" "}
               <button
                 type="button"
-                disabled={busy}
+                disabled={blocked}
                 onClick={() => setEvents(events.filter((_, i) => i !== index))}
               >
                 Remove event {index + 1}
@@ -388,7 +398,7 @@ export default function MeasurementPanel({
           ))}
         </ol>
       </details>
-      <fieldset className="roi-fields" disabled={busy}>
+      <fieldset className="roi-fields" disabled={blocked}>
         <legend>Optional theory · supply both or leave both blank</legend>
         <label>
           Pendulum length (m)
@@ -414,7 +424,7 @@ export default function MeasurementPanel({
       <button
         type="button"
         className="action-button"
-        disabled={busy}
+        disabled={blocked}
         onClick={() => void measure()}
       >
         {busy ? "Working…" : "Measure period"}
@@ -422,9 +432,11 @@ export default function MeasurementPanel({
       <p role="status" aria-live="polite">
         {busy
           ? "Request in progress…"
-          : result
-            ? `Last completed measurement: ${result.status}. Results and exports use the inputs from that completed request; measure again after edits.`
-            : "Choose the axis, then measure. Manual reference and theory are optional."}
+          : disabled
+            ? "Measurement and exports are disabled while upload/tracking is active or current tracking output needs recovery."
+            : result
+              ? `Last completed measurement: ${result.status}. Results and exports use the inputs from that completed request; measure again after edits.`
+              : "Choose the axis, then measure. Manual reference and theory are optional."}
       </p>
       {error && (
         <p role="alert" className="error-message">
@@ -523,7 +535,7 @@ export default function MeasurementPanel({
             <button
               type="button"
               className="action-button"
-              disabled={busy}
+              disabled={blocked}
               onClick={() =>
                 download(
                   new Blob(
@@ -545,7 +557,7 @@ export default function MeasurementPanel({
             <button
               type="button"
               className="action-button"
-              disabled={busy}
+              disabled={blocked}
               onClick={() => void exportCsv()}
             >
               Download CSV
