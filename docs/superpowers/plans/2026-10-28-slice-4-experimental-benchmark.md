@@ -80,7 +80,7 @@
 
 
 **Interfaces:**
-- Add `run_benchmark(dataset_root, lock_path, output_dir, source_commit)` and CLI subcommand `run`; resolve the stored relative manifest/label paths, reload both files, and verify the live test records and test labels against the lock before scoring.
+- Add `run_benchmark(dataset_root, lock_path, output_dir, source_commit)`; Task 4 wires it to CLI subcommand `run`. Resolve the stored relative manifest/label paths, reload both files, and verify the live test records and test labels against the lock before scoring.
 - Use `inspect_video`, `track_video`, and `measure_trace`; create a temporary overlay for tracking and remove it after each clip. Reuse one `TrackResult` per clip for each rater's `MeasurementRequest`.
 - Compare each returned trace's `provenance.source_video_sha256` to the frozen video hash after tracking; reject any mismatch before scoring. Include locked source commit and lock digest in `summary.json`.
 - Emit `results.csv` by retaining the existing template columns and adding `rater_id`, `rater_eligible`, `rater_ineligibility_reason`, `n_reference_intervals`, `rater_reference_period_s`, `reference_period_range_s`, `rater_absolute_error_s`, `clip_median_absolute_error_s`, `tracking_status`, `measurement_status`, `valid_frame_fraction`, and `unavailable_metrics_reason`. Keep unavailable numeric metric fields blank; include a blank-rater `no_reference_annotations` row. Also write `details.jsonl` (trace/provenance/failures and per-rater measurements) and `summary.json`.
