@@ -272,8 +272,8 @@ export default function Workspace() {
               cycles.
             </li>
             <li>
-              Record string length if comparing with theory. Include a visible
-              scale reference where needed.
+              Measure from the pivot to the bob’s center of mass when comparing
+              with theory. Include a visible scale reference where needed.
             </li>
           </ul>
         </section>

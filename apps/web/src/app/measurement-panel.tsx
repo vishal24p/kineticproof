@@ -409,7 +409,7 @@ export default function MeasurementPanel({
       <fieldset className="roi-fields" disabled={blocked}>
         <legend>Optional theory · supply both or leave both blank</legend>
         <label>
-          Pendulum length (m)
+          Pivot to bob center of mass (m)
           <input
             type="number"
             min="0"
