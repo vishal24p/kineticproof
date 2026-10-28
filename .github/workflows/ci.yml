@@ -21,7 +21,7 @@ jobs:
       - run: uv run --project services/api pytest -c services/api/pyproject.toml services/api/tests -q
 
   web:
-    name: Web lint and build
+    name: Web browser test, lint, and build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,5 +32,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
       - run: npm run lint
       - run: npm run build
