@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import statistics
 import subprocess
+import tempfile
 from types import SimpleNamespace
 
 import cv2
@@ -509,6 +510,31 @@ def test_run_rejects_redirected_report_files(tmp_path, monkeypatch, report_name)
     assert redirected.read_text(encoding="utf-8") == "private data"
 
 
+@pytest.mark.parametrize("report_name", ["results.csv", "details.jsonl", "summary.json"])
+def test_run_rejects_hard_linked_report_files_without_modifying_target(tmp_path, monkeypatch, report_name):
+    root, lock_path, _ = _runner_dataset(tmp_path)
+    output = tmp_path / "report"
+    output.mkdir()
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".benchmark-hardlink-", dir=REPO)
+    os.close(descriptor)
+    disposable = Path(temporary_name)
+    report = output / report_name
+    try:
+        disposable.write_text("private data", encoding="utf-8")
+        try:
+            os.link(disposable, report)
+        except (OSError, NotImplementedError):
+            pytest.skip("hard-link creation is unavailable")
+        monkeypatch.setattr(benchmark, "track_video", lambda *args: pytest.fail("must reject report path before tracking"))
+        with pytest.raises(ValueError, match="already exists"):
+            benchmark.run_benchmark(root, lock_path, output, "a" * 40)
+        assert disposable.read_text(encoding="utf-8") == "private data"
+        assert list(output.iterdir()) == [report]
+    finally:
+        report.unlink(missing_ok=True)
+        disposable.unlink(missing_ok=True)
+
+
 def test_run_rejects_report_file_collision_with_dataset_input(tmp_path, monkeypatch):
     root = tmp_path / "runner-private"
     root.mkdir()
@@ -715,12 +741,12 @@ def test_source_change_then_tracking_exception_is_reported_and_not_scored(tmp_pa
     assert benchmark._sha256_file(root / "0.mp4") != json.loads(lock_path.read_text())["test_clips"][0]["video_sha256"]
 
 
-def test_output_write_error_fails_without_success_summary(tmp_path, monkeypatch):
+def test_existing_report_directory_fails_without_success_summary(tmp_path, monkeypatch):
     root, lock_path, _ = _runner_dataset(tmp_path)
     output = tmp_path / "report"
     output.mkdir()
     (output / "results.csv").mkdir()
     monkeypatch.setattr(benchmark, "track_video", lambda *args: _fake_trace(benchmark._sha256_file(args[0])))
-    with pytest.raises(OSError):
+    with pytest.raises(ValueError, match="already exists"):
         benchmark.run_benchmark(root, lock_path, output, "a" * 40)
     assert not (output / "summary.json").exists()

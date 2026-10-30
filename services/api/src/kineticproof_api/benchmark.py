@@ -349,6 +349,8 @@ def _validate_report_targets(output, input_paths):
             raise ValueError(f"Report file must not be a symlink: {target}")
         if any(target == source or (target.exists() and target.samefile(source)) for source in input_paths):
             raise ValueError(f"Report file collides with dataset input: {target}")
+        if target.exists():
+            raise ValueError(f"Report file already exists: {target}")
 
 
 def _git_output(*arguments):
