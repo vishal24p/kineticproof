@@ -270,3 +270,36 @@ def test_muse_provider_failure_surfaces_without_retry_or_fallback():
     assert caught.value.__cause__ is error
     client.responses.create.assert_awaited_once()
 
+
+@pytest.mark.parametrize("field", ["rationale", "limitation"])
+@pytest.mark.parametrize("claim", [
+    "The measured period is 123 seconds",
+    "The measured period is one point two seconds.",
+    "The next period is predicted to be 1.25 seconds.",
+    "Expected frequency: TWO hertz.",
+    "Estimated uncertainty is half a second.",
+])
+def test_muse_rejects_numeric_measurement_or_prediction_in_prose(field, claim):
+    source_trace = trace([0, 1, 0])
+    suggestion = plan_next_trial(source_trace, request()).suggestion.model_dump()
+    client = muse_client({**suggestion, field: claim})
+
+    with pytest.raises(MusePlanningError) as caught:
+        asyncio.run(plan_next_trial_muse(source_trace, request(), client))
+
+    assert "numeric measurements or predictions" in str(caught.value.__cause__)
+    client.responses.create.assert_awaited_once()
+
+
+def test_muse_allows_cycle_guidance_and_qualitative_limitations():
+    source_trace = trace([0, 1, 0])
+    suggestion = plan_next_trial(source_trace, request()).suggestion.model_dump()
+    suggestion["rationale"] = "Record at least two complete cycles."
+    suggestion["limitation"] = "This is not a predicted period. Record 2 more cycles."
+    client = muse_client(suggestion)
+
+    result = asyncio.run(plan_next_trial_muse(source_trace, request(), client))
+
+    assert result.suggestion.model_dump() == suggestion
+    client.responses.create.assert_awaited_once()
+

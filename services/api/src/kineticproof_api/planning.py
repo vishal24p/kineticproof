@@ -1,6 +1,7 @@
 """Pendulum next-trial planning kept separate from measured evidence."""
 
 import json
+import re
 from typing import Literal
 
 from openai import AsyncOpenAI
@@ -189,6 +190,21 @@ async def plan_next_trial_muse(
         if (suggestion.focus_variable != expected.focus_variable
                 or suggestion.action != expected.action):
             raise ValueError("Muse suggestion conflicts with the experiment focus or evidence")
+        # shortcut: English lexical guard, upgrade to constrained prose if broader claim detection is needed.
+        for prose in (suggestion.rationale, suggestion.limitation):
+            for sentence in re.split(r"(?<=[.!?])\s+", prose):
+                has_number = re.search(
+                    r"\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+                    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
+                    r"nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
+                    r"hundred|thousand|million|billion|half|quarter)\b", sentence, re.IGNORECASE,
+                )
+                has_measurement = re.search(
+                    r"\b(?:periods?|seconds?|milliseconds?|frequency|frequencies|hertz|hz|"
+                    r"uncertainty|measur\w*|predict\w*|estimat\w*)\b", sentence, re.IGNORECASE,
+                )
+                if has_number and has_measurement:
+                    raise ValueError("Muse prose must not supply numeric measurements or predictions")
     except Exception as error:
         raise MusePlanningError("Muse planning request or suggestion validation failed") from error
 
