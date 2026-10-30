@@ -1,10 +1,13 @@
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from os import getenv
 from pathlib import Path
 from tempfile import TemporaryDirectory, TemporaryFile
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, UploadFile
+from openai import AsyncOpenAI
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse, JSONResponse, Response
 
@@ -16,6 +19,7 @@ from kineticproof_api.tracking import (
     InitialROI, OverlayError, TrackResult, TrackingRun, UnsupportedContainer,
     VideoMetadata, inspect_video, track_video,
 )
+from kineticproof_api.sam_tracker import SAMTrackingError, track_sam_video
 
 MAX_UPLOAD_BYTES = 100_000_000
 MULTIPART_ALLOWANCE_BYTES = 65_536
@@ -151,16 +155,47 @@ def get_tracking_run(observation_id: str) -> TrackingRun:
 
 
 @app.post("/api/observations/{observation_id}/tracking")
-def track_observation(observation_id: str, roi: InitialROI) -> dict[str, str | int]:
+async def track_observation(
+    observation_id: str,
+    roi: InitialROI,
+    provider: Literal["opencv", "meta_sam"] = Query("opencv"),
+) -> dict[str, str | int]:
     observation = get_observation(observation_id)
+    if roi.x + roi.width > observation.metadata.width or roi.y + roi.height > observation.metadata.height:
+        raise HTTPException(422, "Initial ROI must fit within the first frame")
     overlay_path = app.state.media_dir / f"{uuid4()}-overlay.mp4"
-    try:
-        trace = track_video(observation.source_path, observation.metadata,
-                            roi, observation_id, overlay_path)
-    except OverlayError as error:
-        raise HTTPException(500, str(error)) from error
-    except ValueError as error:
-        raise HTTPException(422, str(error)) from error
+    if provider == "opencv":
+        try:
+            trace = await run_in_threadpool(
+                track_video, observation.source_path, observation.metadata,
+                roi, observation_id, overlay_path,
+            )
+        except OverlayError as error:
+            raise HTTPException(500, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+    else:
+        api_key = getenv("MODEL_API_KEY")
+        if not api_key:
+            raise HTTPException(503, "Meta SAM is unavailable: MODEL_API_KEY is not configured")
+        client = AsyncOpenAI(
+            base_url="https://api.meta.ai/v1",
+            api_key=api_key,
+            max_retries=0,
+        )
+        try:
+            trace = await track_sam_video(
+                observation.source_path, observation.metadata, roi,
+                observation_id, overlay_path, client,
+            )
+        except OverlayError as error:
+            raise HTTPException(500, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        except SAMTrackingError as error:
+            raise HTTPException(502, str(error)) from error
+        finally:
+            await client.close()
     # One assignment publishes the matching pair; failed reruns leave prior output intact.
     observation.tracking_run = TrackingRun(trace, overlay_path)
     return {"status": trace.status, "frame_count": len(trace.frames)}

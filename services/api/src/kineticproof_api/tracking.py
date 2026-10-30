@@ -108,7 +108,8 @@ class Provenance:
     preprocessing: str
     timebase_seconds_per_tick: float
     requested_frames: int
-    opencv_version: str
+    opencv_version: str | None = None
+    provider_request_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-# Truthful project progress — snapshot Oct 28 2026
+# Truthful project progress — snapshot Oct 30 2026
 
 | Workstream | Status | Evidence/next action |
 |---|---|---|
@@ -12,7 +12,7 @@
 | Manual/reference annotations | 0 | Collect independently |
 | Physics engine and API evidence | Implemented locally; synthetic/unit evidence verified | Deterministic projection, gap handling, cycle detection, manual/theory separation and CSV/JSON contracts documented in SCIENCE_ENGINE + API_CONTRACTS; authentic-clip validity and independent manual timing remain unverified. |
 | Web interface and deployment | Bootstrap landing page only; deployment unverified | Real upload/tracking interface remains Slice 3 |
-| Meta SAM/Muse integration | Not tested | Slice 5 |
+| Meta SAM/Muse integration | Optional SAM 3.1 API adapter implemented locally; live behavior unverified | OpenCV remains default; no live call, account access, real output, latency, or cost verified. Muse remains next. |
 | Meta credit form | User reports submitted; billing unverified | Check account |
 | Competition rules and form requirements | Reviewed from user-provided text | HACKATHON_RULES + SUBMISSION |
 | Three-minute demo + public repo links | Not created | Slice 6 |
@@ -25,3 +25,5 @@
 **Slice 2 local verification on Oct 28, 2026:** `uv run --project services/api pytest services/api/tests -q` (91 passed in 9.56s); `uv lock --check --project services/api` (Resolved 28 packages in 2ms; lock valid); `git diff --check` (clean, exit 0). Tests establish deterministic behavior on unit/synthetic traces, including topographic shoulder rejection in both directions, exact cycle bounds and irregular timestamp durations on both sides of a gap, missing-data warnings on successful measurements, explicit filter/detector configuration, stable extreme theoretical periods and 422 for unrepresentable theory in JSON/CSV, per-segment prominence thresholds, manual references, lookup/input errors, JSON/CSV parity, and header-only CSV for insufficient data including one cycle. They do not establish authentic-clip validity, independent manual timing, real-world accuracy, or confidence intervals. Next bounded task: implement the Slice 3 web MVP journey (upload, target selection, track review and evidence), while keeping authentic-clip validation as an explicit outstanding acceptance item.
 
 **Slice 2 GitHub CI (Oct 28, 2026):** API tests and Web lint/build both passed on [PR #3](https://github.com/vishal24p/kineticproof/pull/3).
+
+**Slice 5 offline verification (Oct 30, 2026):** `uv run --project services/api pytest -c services/api/pyproject.toml services/api/tests -q` (110 passed in 4.76s); `uv lock --check --project services/api` (37 packages resolved; lock valid); `git diff --check` (clean). The added SAM path is covered with fake SDK streams, synthetic video, and one synthetic output fixture parsed by the official Meta parser. No API key, hosted call, paid request, or user video was used. This verifies local request plumbing and mapping only; account entitlement, real SAM behavior, accuracy, latency and cost remain unknown.

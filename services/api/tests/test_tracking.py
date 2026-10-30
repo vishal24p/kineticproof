@@ -370,7 +370,8 @@ def test_csrt_trace_and_overlay(uploaded_synthetic, tmp_path):
     assert trace["failures"] == []
     assert trace["provenance"] == {"source_video_sha256": sha256(source).hexdigest(),
         "preprocessing": "none", "timebase_seconds_per_tick": 0.1,
-        "requested_frames": 6, "opencv_version": cv2.__version__}
+        "requested_frames": 6, "opencv_version": cv2.__version__,
+        "provider_request_id": None}
     assert [frame["frame_index"] for frame in trace["frames"]] == list(range(6))
     assert [frame["timestamp_seconds"] for frame in trace["frames"]] == pytest.approx([0, .1, .2, .3, .4, .5])
     assert all(frame["quality_flags"] == [] for frame in trace["frames"])
@@ -389,6 +390,124 @@ def test_csrt_trace_and_overlay(uploaded_synthetic, tmp_path):
     metadata = tracking.inspect_video(overlay_path)
     assert metadata.frame_count == 6
     assert (metadata.width, metadata.height) == (64, 48)
+
+
+def _synthetic_sam_trace(observation_id):
+    frames = [tracking.TrackFrame(
+        index, index / 10, tracking.BoundingBox(0, 12, 13, 13), 6.5, 18.5, [],
+    ) for index in range(6)]
+    return tracking.TrackResult(
+        "1.0.0", None, observation_id, "meta_sam", "sam-3.1", "3.1",
+        "meta-sam-3.1-forward-box-v1", "succeeded", frames, [],
+        tracking.Provenance("synthetic-test-hash", "none", 0.1, 6,
+                            provider_request_id="synthetic-test-request"),
+    )
+
+
+def test_explicit_opencv_provider_uses_existing_trace(uploaded_synthetic):
+    client, observation_id, _ = uploaded_synthetic
+    response = client.post(
+        f"/api/observations/{observation_id}/tracking?provider=opencv",
+        json={"x": 0, "y": 12, "width": 13, "height": 13},
+    )
+    assert response.status_code == 200
+    assert client.get(f"/api/observations/{observation_id}/tracks").json()["provider_name"] == "opencv"
+
+
+def test_invalid_tracking_provider_is_rejected(uploaded_synthetic):
+    client, observation_id, _ = uploaded_synthetic
+    response = client.post(
+        f"/api/observations/{observation_id}/tracking?provider=unknown",
+        json={"x": 0, "y": 12, "width": 13, "height": 13},
+    )
+    assert response.status_code == 422
+    assert client.get(f"/api/observations/{observation_id}/tracks").status_code == 409
+
+
+def test_sam_provider_without_key_never_constructs_client(uploaded_synthetic, monkeypatch):
+    client, observation_id, _ = uploaded_synthetic
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.setattr(main, "AsyncOpenAI", lambda **kwargs: pytest.fail("client must not be constructed"))
+
+    response = client.post(
+        f"/api/observations/{observation_id}/tracking?provider=meta_sam",
+        json={"x": 0, "y": 12, "width": 13, "height": 13},
+    )
+    assert response.status_code == 503
+    assert client.get(f"/api/observations/{observation_id}/tracks").status_code == 409
+
+
+def test_sam_provider_is_explicit_and_closes_client(uploaded_synthetic, monkeypatch):
+    client, observation_id, _ = uploaded_synthetic
+    monkeypatch.setenv("MODEL_API_KEY", "test-only-key")
+    client_options = {}
+
+    class FakeMetaClient:
+        closed = False
+
+        async def close(self):
+            self.closed = True
+
+    fake_client = FakeMetaClient()
+
+    def build_client(**kwargs):
+        client_options.update(kwargs)
+        return fake_client
+
+    async def fake_sam_tracker(source_path, metadata, roi, requested_id, overlay_path, used_client):
+        assert source_path.exists()
+        assert requested_id == observation_id
+        assert (roi.x, roi.y, roi.width, roi.height) == (0, 12, 13, 13)
+        assert used_client is fake_client
+        overlay_path.write_bytes(b"synthetic test overlay")
+        return _synthetic_sam_trace(requested_id)
+
+    monkeypatch.setattr(main, "AsyncOpenAI", build_client)
+    monkeypatch.setattr(main, "track_sam_video", fake_sam_tracker)
+    response = client.post(
+        f"/api/observations/{observation_id}/tracking?provider=meta_sam",
+        json={"x": 0, "y": 12, "width": 13, "height": 13},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "succeeded", "frame_count": 6}
+    assert client.get(f"/api/observations/{observation_id}/tracks").json()["provider_name"] == "meta_sam"
+    assert client_options == {
+        "base_url": "https://api.meta.ai/v1",
+        "api_key": "test-only-key",
+        "max_retries": 0,
+    }
+    assert fake_client.closed
+
+
+def test_failed_sam_rerun_does_not_fallback_or_replace_success(
+    uploaded_synthetic, monkeypatch,
+):
+    from kineticproof_api.sam_tracker import SAMTrackingError
+
+    client, observation_id, _ = uploaded_synthetic
+    base = f"/api/observations/{observation_id}"
+    roi = {"x": 0, "y": 12, "width": 13, "height": 13}
+    assert client.post(f"{base}/tracking", json=roi).status_code == 200
+    trace = client.get(f"{base}/tracks").json()
+    overlay = client.get(f"{base}/overlay").content
+    monkeypatch.setenv("MODEL_API_KEY", "test-only-key")
+
+    class FakeMetaClient:
+        async def close(self):
+            pass
+
+    monkeypatch.setattr(main, "AsyncOpenAI", lambda **kwargs: FakeMetaClient())
+    async def failed_sam_tracker(*args):
+        raise SAMTrackingError("synthetic provider failure")
+
+    monkeypatch.setattr(main, "track_sam_video", failed_sam_tracker)
+    monkeypatch.setattr(main, "track_video", lambda *args: pytest.fail("must not fall back to OpenCV"))
+    response = client.post(f"{base}/tracking?provider=meta_sam", json=roi)
+
+    assert response.status_code == 502
+    assert client.get(f"{base}/tracks").json() == trace
+    assert client.get(f"{base}/overlay").content == overlay
 
 
 def test_failed_csrt_update_has_null_geometry(uploaded_synthetic, monkeypatch):
