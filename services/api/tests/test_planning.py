@@ -279,6 +279,8 @@ def test_muse_provider_failure_surfaces_without_retry_or_fallback():
     "Expected frequency: TWO hertz.",
     "Estimated uncertainty is half a second.",
     "The measured period is 123 seconds after recording two complete cycles.",
+    "The measured frequency is two cycles per second.",
+    "Record two cycles per second.",
 ])
 def test_muse_rejects_numeric_measurement_or_prediction_in_prose(field, claim):
     source_trace = trace([0, 1, 0])

@@ -200,8 +200,10 @@ async def plan_next_trial_muse(
                     r"hundred|thousand|million|billion|half|quarter)\b"
                 )
                 without_cycle_counts = re.sub(
-                    rf"(?:{number_pattern})(?:[\s-]+(?:{number_pattern}))*"
-                    r"\s+(?:complete\s+)?cycles?\b", "", sentence, flags=re.IGNORECASE,
+                    rf"^\s*record\s+(?:at\s+least\s+)?(?:{number_pattern})"
+                    rf"(?:[\s-]+(?:{number_pattern}))*"
+                    r"\s+(?:complete\s+)?cycles?\b(?=\s*(?:[.!?]|$)|\s+to\b)",
+                    "", sentence, flags=re.IGNORECASE,
                 )
                 has_number = re.search(number_pattern, without_cycle_counts, re.IGNORECASE)
                 has_measurement = re.search(
