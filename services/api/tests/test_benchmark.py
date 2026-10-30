@@ -40,7 +40,8 @@ def test_cli_help_and_subcommands():
     for command in ("freeze", "run"):
         result = _benchmark_cli(command, "--help")
         assert result.returncode == 0
-        assert f"benchmark {command}" in result.stdout
+        usage = next((line for line in result.stdout.splitlines() if line.startswith("usage: ")), "")
+        assert command in usage.split()[1:]
 
     assert _benchmark_cli().returncode == 2
 
