@@ -193,12 +193,17 @@ async def plan_next_trial_muse(
         # shortcut: English lexical guard, upgrade to constrained prose if broader claim detection is needed.
         for prose in (suggestion.rationale, suggestion.limitation):
             for sentence in re.split(r"(?<=[.!?])\s+", prose):
-                has_number = re.search(
-                    r"\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|"
+                number_pattern = (
+                    r"\d+(?:\.\d+)?|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|"
                     r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|"
                     r"nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
-                    r"hundred|thousand|million|billion|half|quarter)\b", sentence, re.IGNORECASE,
+                    r"hundred|thousand|million|billion|half|quarter)\b"
                 )
+                without_cycle_counts = re.sub(
+                    rf"(?:{number_pattern})(?:[\s-]+(?:{number_pattern}))*"
+                    r"\s+(?:complete\s+)?cycles?\b", "", sentence, flags=re.IGNORECASE,
+                )
+                has_number = re.search(number_pattern, without_cycle_counts, re.IGNORECASE)
                 has_measurement = re.search(
                     r"\b(?:periods?|seconds?|milliseconds?|frequency|frequencies|hertz|hz|"
                     r"uncertainty|measur\w*|predict\w*|estimat\w*)\b", sentence, re.IGNORECASE,

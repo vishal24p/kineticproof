@@ -278,6 +278,7 @@ def test_muse_provider_failure_surfaces_without_retry_or_fallback():
     "The next period is predicted to be 1.25 seconds.",
     "Expected frequency: TWO hertz.",
     "Estimated uncertainty is half a second.",
+    "The measured period is 123 seconds after recording two complete cycles.",
 ])
 def test_muse_rejects_numeric_measurement_or_prediction_in_prose(field, claim):
     source_trace = trace([0, 1, 0])
@@ -291,10 +292,14 @@ def test_muse_rejects_numeric_measurement_or_prediction_in_prose(field, claim):
     client.responses.create.assert_awaited_once()
 
 
-def test_muse_allows_cycle_guidance_and_qualitative_limitations():
+@pytest.mark.parametrize("rationale", [
+    "Record at least two complete cycles.",
+    "Record two complete cycles to improve period estimation.",
+])
+def test_muse_allows_cycle_guidance_and_qualitative_limitations(rationale):
     source_trace = trace([0, 1, 0])
     suggestion = plan_next_trial(source_trace, request()).suggestion.model_dump()
-    suggestion["rationale"] = "Record at least two complete cycles."
+    suggestion["rationale"] = rationale
     suggestion["limitation"] = "This is not a predicted period. Record 2 more cycles."
     client = muse_client(suggestion)
 
