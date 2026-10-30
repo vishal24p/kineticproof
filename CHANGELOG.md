@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0.0] - 2026-10-30
+
+### Added
+
+- Add a local benchmark CLI that validates private clip manifests and independent event labels, freezes session-separated test inputs, and reports per-rater and clip-equal CSRT results.
+- Document private dataset setup, immutable benchmark locks, explicit unavailable metrics, and synthetic-only test evidence.
+
+### Fixed
+
+- Reject report-file redirection and inputs outside the frozen source timestamp range; preserve the verified manifest and labels snapshot during scoring.
+
 ## [0.2.0.0] - 2026-10-28
 
 ### Added
