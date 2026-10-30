@@ -1,11 +1,18 @@
+import asyncio
+import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 from pydantic import ValidationError
 
 from kineticproof_api.physics import MeasurementRequest, measure_trace
 from kineticproof_api.planning import (
     NextTrialSuggestion,
+    MusePlanningError,
     PlanningRequest,
     plan_next_trial,
+    plan_next_trial_muse,
 )
 from kineticproof_api.tracking import Provenance, TrackFrame, TrackResult
 
@@ -129,4 +136,137 @@ def test_suggestion_rejects_a_change_that_conflicts_with_focus_or_constants():
             action="vary_background_condition",
             variable_to_change="background_condition",
         )
+
+
+def muse_client(suggestion, *, status="completed", error=None):
+    create = AsyncMock(
+        return_value=SimpleNamespace(status=status, output_text=json.dumps(suggestion)),
+        side_effect=error,
+    )
+    return SimpleNamespace(responses=SimpleNamespace(create=create))
+
+
+def test_muse_request_is_minimized_strict_and_keeps_local_measurement(monkeypatch):
+    source_trace = trace([0, 0, 2, 2, 2, 0, 0, 0, 2, 2, 2, 0, 0, 1, 3, 1, 0])
+    planning_request = request(gravity_m_s2=9.81)
+    local = plan_next_trial(source_trace, planning_request)
+    before = local.measurement.model_dump()
+    source_before = repr(source_trace)
+    calls = []
+
+    def measure(received_trace, measurement_request):
+        calls.append((received_trace, measurement_request))
+        return local.measurement
+
+    monkeypatch.setattr("kineticproof_api.planning.measure_trace", measure)
+    client = muse_client(local.suggestion.model_dump())
+    result = asyncio.run(plan_next_trial_muse(source_trace, planning_request, client))
+
+    assert result.provider_name == "meta_muse"
+    assert result.measurement is local.measurement
+    assert result.measurement.model_dump() == before
+    assert repr(source_trace) == source_before
+    assert len(calls) == 1
+    assert calls[0][0] is source_trace
+    client.responses.create.assert_awaited_once()
+    sent = client.responses.create.call_args.kwargs
+    assert set(sent) == {"model", "store", "instructions", "input", "text"}
+    assert sent["model"] == "muse-spark-1.3"
+    assert sent["store"] is False
+    assert "Never supply measured values or numeric period predictions" in sent["instructions"]
+    assert json.loads(sent["input"]) == {
+        "context": planning_request.context.model_dump(mode="json"),
+        "measurement": {
+            "status": "succeeded",
+            "measured_period_seconds": local.measurement.measured_period_seconds,
+            "cycle_mad_seconds": local.measurement.cycle_mad_seconds,
+            "valid_frame_fraction": 1.0,
+            "warnings": local.measurement.warnings,
+        },
+    }
+    schema = NextTrialSuggestion.model_json_schema()
+    schema["properties"]["focus_variable"]["enum"] = ["length_m"]
+    schema["properties"]["action"]["enum"] = ["vary_length"]
+    schema["properties"]["variable_to_change"]["enum"] = ["length_m"]
+    assert sent["text"] == {"format": {
+        "type": "json_schema", "name": "next_trial_suggestion",
+        "strict": True, "schema": schema,
+    }}
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+
+
+@pytest.mark.parametrize("focus", ["length_m", "background_condition"])
+@pytest.mark.parametrize("sufficient", [False, True])
+def test_muse_accepts_only_expected_action_for_focus_and_evidence(focus, sufficient):
+    values = [0, 0, 2, 2, 2, 0, 0, 0, 2, 2, 2, 0, 0, 1, 3, 1, 0] if sufficient else [0, 1, 0]
+    context = request().context.model_dump()
+    context["focus_variable"] = focus
+    planning_request = request(context=context)
+    local = plan_next_trial(trace(values), planning_request)
+    client = muse_client(local.suggestion.model_dump())
+
+    result = asyncio.run(plan_next_trial_muse(trace(values), planning_request, client))
+
+    assert result.suggestion == local.suggestion
+    assert result.measurement == local.measurement
+    assert result.provider_name == "meta_muse"
+    client.responses.create.assert_awaited_once()
+
+
+@pytest.mark.parametrize("override", [
+    {"measured_period_seconds": 123.0},
+    {"predicted_period_seconds": 123.0},
+    {"variable_to_change": "release_angle_degrees"},
+    {"focus_variable": "background_condition"},
+    {"held_constant": ["length_m"]},
+    {"rationale": ""},
+    {"rationale": 42},
+    {"action": "vary_length", "variable_to_change": "length_m",
+     "held_constant": ["release_angle_degrees", "camera_position", "background_condition"]},
+])
+def test_muse_rejects_invalid_suggestion_without_retry_or_fallback(override):
+    source_trace = trace([0, 1, 0])
+    suggestion = plan_next_trial(source_trace, request()).suggestion.model_dump()
+    client = muse_client({**suggestion, **override})
+
+    with pytest.raises(MusePlanningError) as caught:
+        asyncio.run(plan_next_trial_muse(source_trace, request(), client))
+
+    assert isinstance(caught.value.__cause__, ValueError)
+    client.responses.create.assert_awaited_once()
+
+
+def test_muse_rejects_recording_action_when_measurement_succeeds():
+    source_trace = trace([0, 0, 2, 2, 2, 0, 0, 0, 2, 2, 2, 0, 0, 1, 3, 1, 0])
+    suggestion = plan_next_trial(trace([0, 1, 0]), request()).suggestion.model_dump()
+    client = muse_client(suggestion)
+
+    with pytest.raises(MusePlanningError):
+        asyncio.run(plan_next_trial_muse(source_trace, request(), client))
+    client.responses.create.assert_awaited_once()
+
+
+@pytest.mark.parametrize("status,output", [
+    ("incomplete", "{}"), ("failed", "{}"), ("completed", "invalid JSON"),
+    ("completed", ""), ("completed", None),
+])
+def test_muse_rejects_incomplete_or_malformed_response(status, output):
+    client = muse_client({})
+    client.responses.create.return_value = SimpleNamespace(status=status, output_text=output)
+
+    with pytest.raises(MusePlanningError):
+        asyncio.run(plan_next_trial_muse(trace([0, 1, 0]), request(), client))
+    client.responses.create.assert_awaited_once()
+
+
+def test_muse_provider_failure_surfaces_without_retry_or_fallback():
+    error = RuntimeError("provider unavailable")
+    client = muse_client({}, error=error)
+
+    with pytest.raises(MusePlanningError) as caught:
+        asyncio.run(plan_next_trial_muse(trace([0, 1, 0]), request(), client))
+
+    assert caught.value.__cause__ is error
+    client.responses.create.assert_awaited_once()
 
