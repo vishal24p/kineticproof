@@ -38,6 +38,20 @@ uv run --project services/api pytest -c services/api/pyproject.toml services/api
 
 The health endpoint returns `{"status":"ok"}`. Local upload, tracking, trace, overlay and period measurement endpoints are described in [API contracts](docs/API_CONTRACTS.md).
 
+OpenCV CSRT is the default tracking provider. The API also has an explicit SAM 3.1 path: set `MODEL_API_KEY` in the API process environment, upload only a permitted clip, then request `provider=meta_sam` with the same first-frame ROI. Do not commit the key. SAM uploads are requested to expire after one hour and are deleted after the response is parsed; no live SAM call or result has been verified. The endpoint may incur Meta charges, so use it only after confirming account access and spend authorization.
+
+PowerShell example, using an observation ID returned by the local upload endpoint:
+
+```powershell
+$observationId = '<observation ID from upload>'
+$roi = @{ x = 120; y = 80; width = 40; height = 40 } | ConvertTo-Json
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/api/observations/$observationId/tracking?provider=meta_sam" `
+  -ContentType 'application/json' -Body $roi
+```
+
+If `MODEL_API_KEY` is absent, this request returns 503 before any remote upload. SAM errors return 502 without falling back to OpenCV; omit the query parameter to use the offline OpenCV path.
+
 Start the web app in another terminal, then open [localhost:3000](http://localhost:3000):
 
 ```powershell

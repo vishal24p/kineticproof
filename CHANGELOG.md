@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0.0] - 2026-10-30
+
+### Added
+
+- Select Meta SAM 3.1 explicitly for tracking; OpenCV remains the default and selected-provider failures do not fall back.
+- Map SAM boxes to source-timed traces and local overlays, with one-hour remote-file expiry and deletion attempts.
+- Add offline adapter/API tests using synthetic media and parser fixtures; no hosted calls or SAM measurements were made.
+
 ## [0.2.0.0] - 2026-10-28
 
 ### Added

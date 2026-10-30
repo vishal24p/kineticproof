@@ -17,7 +17,7 @@ Setup/recording instructions; upload/target select; track review; evidence; next
 Record permitted home pendulum videos (clean/clutter/moving background), annotate independent reference cycles, run OpenCV baseline and optional open model, publish denominators and failures. Freeze test split before comparison.
 
 ## Slice 5 — Meta migration
-After credits/access, implement SAM and Muse adapters without changing physics or UI contracts. Compare provider outputs fairly; preserve open fallback. Do not claim Meta use until measured. Show actual Meta value in hackathon demo.
+**Status:** Optional SAM 3.1 API adapter implemented locally; no hosted calls or real SAM results verified. OpenCV remains the default and SAM errors do not fall back silently. Next, validate SAM on permitted footage after confirming account access and spend authorization; compare with OpenCV using independent labels. Muse is next after SAM validation. Do not claim Meta value until measured.
 
 ## Slice 6 — hardening and submission
 Cloud-host working link; secrets/retention/security/reproducibility; public GitHub README with architecture and benchmarks; a real three-minute narrated demo hosted at public video URL; answer Meta relevance and user problem in portal before deadline.
