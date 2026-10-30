@@ -45,18 +45,21 @@ def _private_path(path, dataset_root, label):
     return root, resolved
 
 
-def _last_video_timestamp(path: Path) -> float:
+def _video_timestamp_bounds(path: Path) -> tuple[float, float]:
     capture = cv2.VideoCapture(str(path), cv2.CAP_FFMPEG)
     try:
         if not capture.isOpened():
             raise ValueError("Video cannot be decoded")
         fps = capture.get(cv2.CAP_PROP_FPS)
-        timestamp = None
+        first_timestamp = last_timestamp = None
         while capture.read()[0]:
             timestamp = capture.get(cv2.CAP_PROP_PTS) / fps
-        if timestamp is None:
+            if first_timestamp is None:
+                first_timestamp = timestamp
+            last_timestamp = timestamp
+        if first_timestamp is None or last_timestamp is None:
             raise ValueError("Video has no source timestamps")
-        return timestamp
+        return first_timestamp, last_timestamp
     finally:
         capture.release()
 
@@ -176,13 +179,15 @@ def validate_dataset(manifest, labels, dataset_root) -> None:
         metadata = records[clip_id].get("_video_metadata")
         if metadata is None:
             metadata = inspect_video(Path(dataset_root) / records[clip_id]["video_path"])
-        last_timestamp = _last_video_timestamp(
+        first_timestamp, last_timestamp = _video_timestamp_bounds(
             records[clip_id].get("_resolved_video_path", root / records[clip_id]["video_path"])
         )
         for rater_id, events in raters.items():
             for event in events:
                 if event.evidence_frame_index >= metadata.frame_count:
                     raise ValueError(f"Evidence frame index out of range for clip {clip_id}, rater {rater_id}")
+                if event.timestamp_seconds < first_timestamp:
+                    raise ValueError(f"Event timestamp is before clip start for clip {clip_id}, rater {rater_id}")
                 if event.timestamp_seconds > last_timestamp:
                     raise ValueError(f"Event timestamp exceeds clip duration for clip {clip_id}, rater {rater_id}")
 
@@ -231,7 +236,7 @@ def _canonical_test_inputs(manifest, labels, dataset_root):
     return test_records, label_rows
 
 
-def _lock_payload(dataset_root, manifest_path, labels_path, source_commit):
+def _lock_payload(dataset_root, manifest_path, labels_path, source_commit, *, include_inputs=False):
     root, manifest_file = _private_path(manifest_path, dataset_root, "manifest path")
     _, labels_file = _private_path(labels_path, root, "event-label path")
     manifest = load_manifest(manifest_file, root)
@@ -241,7 +246,7 @@ def _lock_payload(dataset_root, manifest_path, labels_path, source_commit):
     if not test_records:
         raise ValueError("Dataset must contain at least one test clip")
     sessions = {record["recording_session_id"]: record["split"] for record in manifest}
-    return {
+    payload = {
         "version": LOCK_VERSION,
         "inputs": {
             "manifest_path": manifest_file.relative_to(root).as_posix(),
@@ -254,6 +259,7 @@ def _lock_payload(dataset_root, manifest_path, labels_path, source_commit):
         "test_label_rows": label_rows,
         "test_label_rows_sha256": hashlib.sha256(_canonical_json(label_rows)).hexdigest(),
     }
+    return (payload, manifest, labels) if include_inputs else payload
 
 
 def freeze_dataset(dataset_root, manifest_path, labels_path, lock_path, source_commit):
@@ -273,7 +279,7 @@ def freeze_dataset(dataset_root, manifest_path, labels_path, lock_path, source_c
     return lock
 
 
-def verify_frozen_inputs(dataset_root, lock_path):
+def verify_frozen_inputs(dataset_root, lock_path, *, include_inputs=False):
     lock_file = Path(lock_path).resolve()
     if _inside(lock_file, REPOSITORY_ROOT):
         raise ValueError("lock_path must be outside the repository checkout")
@@ -294,12 +300,13 @@ def verify_frozen_inputs(dataset_root, lock_path):
         if not isinstance(manifest_path, str) or not isinstance(labels_path, str):
             raise ValueError("Lock input paths must be relative strings")
         root = Path(dataset_root).resolve()
-        current = _lock_payload(root, root / manifest_path, root / labels_path, lock["source_commit"])
+        current, manifest, labels = _lock_payload(
+            root, root / manifest_path, root / labels_path, lock["source_commit"], include_inputs=True)
         if current != payload:
             raise ValueError("Frozen test inputs or session split map changed; create a new lock")
     except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
         raise ValueError(f"Cannot verify benchmark lock: {error}") from error
-    return lock
+    return (lock, manifest, labels) if include_inputs else lock
 
 
 def _reference_summary(events):
@@ -333,6 +340,15 @@ def _json_model(value):
 
 def _write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+
+
+def _validate_report_targets(output, input_paths):
+    for name in ("results.csv", "details.jsonl", "summary.json"):
+        target = output / name
+        if target.is_symlink():
+            raise ValueError(f"Report file must not be a symlink: {target}")
+        if any(target == source or (target.exists() and target.samefile(source)) for source in input_paths):
+            raise ValueError(f"Report file collides with dataset input: {target}")
 
 
 def _git_output(*arguments):
@@ -394,23 +410,19 @@ def main(argv=None):
 def run_benchmark(dataset_root, lock_path, output_dir, source_commit):
     if not isinstance(source_commit, str) or re.fullmatch(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})", source_commit) is None:
         raise ValueError("source_commit must be a full 40- or 64-character hexadecimal Git commit")
-    lock = verify_frozen_inputs(dataset_root, lock_path)
+    lock, manifest, labels = verify_frozen_inputs(dataset_root, lock_path, include_inputs=True)
     if source_commit.lower() != lock["source_commit"]:
         raise ValueError("source_commit does not match the benchmark lock")
     output = Path(output_dir).resolve()
     if _inside(output, REPOSITORY_ROOT):
         raise ValueError("output_dir must be outside the repository checkout")
     output.mkdir(parents=True, exist_ok=True)
+    root = Path(dataset_root).resolve()
+    manifest_path = (root / lock["inputs"]["manifest_path"]).resolve()
+    labels_path = (root / lock["inputs"]["labels_path"]).resolve()
+    _validate_report_targets(output, [manifest_path, labels_path, *(record["_resolved_video_path"] for record in manifest)])
     summary_path = output / "summary.json"
     summary_path.unlink(missing_ok=True)
-
-    root = Path(dataset_root).resolve()
-    manifest_path = root / lock["inputs"]["manifest_path"]
-    labels_path = root / lock["inputs"]["labels_path"]
-    manifest = load_manifest(manifest_path, root)
-    clip_ids = {record["clip_id"] for record in manifest}
-    labels = load_event_labels(labels_path, root, clip_ids)
-    validate_dataset(manifest, labels, root)
     test_records = {record["clip_id"]: record for record in manifest if record["split"] == "test"}
     frozen = {record["clip_id"]: record for record in lock["test_clips"]}
     if set(test_records) != set(frozen):

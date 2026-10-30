@@ -256,12 +256,16 @@ def test_session_cannot_cross_splits(tmp_path):
 
 
 
-def test_offset_source_timestamps_are_checked_against_final_pts(tmp_path, monkeypatch):
+def test_source_timestamp_labels_must_fall_within_decoded_pts_bounds(tmp_path, monkeypatch):
     root = dataset(tmp_path)
     records = load_manifest(root / "manifest.json", root)
-    monkeypatch.setattr(benchmark, "_last_video_timestamp", lambda path: 10.5)
+    monkeypatch.setattr(benchmark, "_video_timestamp_bounds", lambda path: (10.0, 10.5))
     labels = {"clip-a": {"r1": [benchmark.ReferenceEvent(event_type="leftmost", timestamp_seconds=10.4, evidence_frame_index=4, uncertainty_seconds=0.01)]}}
     validate_dataset(records, labels, root)
+    labels["clip-a"]["r1"][0] = benchmark.ReferenceEvent(
+        event_type="leftmost", timestamp_seconds=3.0, evidence_frame_index=4, uncertainty_seconds=0.01)
+    with pytest.raises(ValueError, match="before clip start"):
+        validate_dataset(records, labels, root)
 
 
 def _freeze_inputs(root, *, dev=False):
@@ -442,12 +446,88 @@ def test_run_rejects_changed_test_labels_before_scoring(tmp_path, monkeypatch):
         benchmark.run_benchmark(root, lock_path, tmp_path / "report", "a" * 40)
 
 
+def test_run_scores_the_verified_input_snapshot(tmp_path, monkeypatch):
+    root, lock_path, _ = _runner_dataset(tmp_path, rows=[("clip-0", "r1", "leftmost", .1, 1, .01),
+                                                           ("clip-0", "r1", "leftmost", .3, 3, .01)])
+    original_manifest = benchmark.load_manifest
+    original_labels = benchmark.load_event_labels
+
+    def mutate_manifest_after_verified_load(*args):
+        records = original_manifest(*args)
+        payload = json.loads((root / "inputs" / "manifest.json").read_text())
+        payload[0]["initial_roi"]["x"] = 2
+        payload[0]["motion_axis"] = {"x": 0, "y": 1}
+        payload[0]["scene_condition"] = "moving_background"
+        (root / "inputs" / "manifest.json").write_text(json.dumps(payload))
+        return records
+
+    def mutate_labels_after_verified_load(*args):
+        labels = original_labels(*args)
+        path = root / "inputs" / "labels.csv"
+        path.write_text(path.read_text().replace(",0.3,3,", ",0.4,3,"), encoding="utf-8")
+        return labels
+
+    monkeypatch.setattr(benchmark, "load_manifest", mutate_manifest_after_verified_load)
+    monkeypatch.setattr(benchmark, "load_event_labels", mutate_labels_after_verified_load)
+    monkeypatch.setattr(benchmark, "track_video", lambda path, metadata, roi, *args: (
+        roi.x == 1 or pytest.fail("run used a manifest reloaded after verification"),
+        _fake_trace(benchmark._sha256_file(path)),
+    )[1])
+    monkeypatch.setattr(benchmark, "measure_trace", lambda trace, request: (
+        [event.timestamp_seconds for event in request.reference_events] == [.1, .3]
+        or pytest.fail("run used labels reloaded after verification"),
+        _fake_measurement(),
+    )[1])
+
+    summary = benchmark.run_benchmark(root, lock_path, tmp_path / "report", "a" * 40)
+    assert summary["conditions"]["clean"]["test_clip_count"] == 1
+    assert summary["conditions"]["moving_background"]["test_clip_count"] == 0
+
+
 def test_run_requires_locked_source_commit_and_output_outside_repository(tmp_path):
     root, lock_path, _ = _runner_dataset(tmp_path)
     with pytest.raises(ValueError, match="source_commit"):
         benchmark.run_benchmark(root, lock_path, tmp_path / "report", "b" * 40)
     with pytest.raises(ValueError, match="outside the repository"):
         benchmark.run_benchmark(root, lock_path, REPO / "benchmark-output", "a" * 40)
+
+
+@pytest.mark.parametrize("report_name", ["results.csv", "details.jsonl", "summary.json"])
+def test_run_rejects_redirected_report_files(tmp_path, monkeypatch, report_name):
+    root, lock_path, _ = _runner_dataset(tmp_path)
+    output = tmp_path / "report"
+    output.mkdir()
+    redirected = tmp_path / f"redirected-{report_name}"
+    redirected.write_text("private data", encoding="utf-8")
+    try:
+        (output / report_name).symlink_to(redirected)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable")
+    monkeypatch.setattr(benchmark, "track_video", lambda *args: pytest.fail("must reject report path before tracking"))
+    with pytest.raises(ValueError, match="symlink"):
+        benchmark.run_benchmark(root, lock_path, output, "a" * 40)
+    assert redirected.read_text(encoding="utf-8") == "private data"
+
+
+def test_run_rejects_report_file_collision_with_dataset_input(tmp_path, monkeypatch):
+    root = tmp_path / "runner-private"
+    root.mkdir()
+    records = [dict(clip_id="clip-0", recording_session_id="session-0", video_path="0.mp4", split="test",
+                    scene_condition="clean", initial_roi=dict(x=1, y=1, width=10, height=10),
+                    motion_axis=dict(x=1, y=0), rights_status="permitted")]
+    video(root / "0.mp4", frames=41)
+    inputs = root / "inputs"
+    inputs.mkdir()
+    manifest = inputs / "manifest.json"
+    labels = inputs / "results.csv"
+    manifest.write_text(json.dumps(records), encoding="utf-8")
+    labels.write_text("clip_id,rater_id,event_type,timestamp_seconds,evidence_frame_index,uncertainty_seconds\n", encoding="utf-8")
+    lock_path = tmp_path / "lock.json"
+    benchmark.freeze_dataset(root, manifest, labels, lock_path, "a" * 40)
+    monkeypatch.setattr(benchmark, "track_video", lambda *args: pytest.fail("must reject input collision before tracking"))
+    with pytest.raises(ValueError, match="collides"):
+        benchmark.run_benchmark(root, lock_path, inputs, "a" * 40)
+    assert "clip_id,rater_id" in labels.read_text(encoding="utf-8")
 
 
 def test_clip_is_tracked_once_and_each_rater_is_scored_separately(tmp_path, monkeypatch):
