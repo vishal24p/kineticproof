@@ -54,3 +54,16 @@ npm --prefix apps/web run lint
 The web app uses Biome for linting and formatting checks.
 
 The landing page is a bootstrap placeholder. No upload or tracking controls are available yet.
+
+## Private local benchmark
+
+Keep permitted clips, independent labels, locks, and reports outside this repository. The manifest and labels format, privacy rule, and example layout are in [data and annotation guidance](docs/DATA_AND_ANNOTATION.md). From the repository root, freeze a clean Git checkout first, then run only at that same clean locked commit:
+
+```powershell
+$env:PYTHONPATH = 'services/api/src'
+$dataset = 'C:\KineticProof-private\pendulum-v1'
+uv run --project services/api python -m kineticproof_api.benchmark freeze --dataset-root $dataset --manifest "$dataset\manifest.json" --labels "$dataset\labels.csv" --lock "$dataset\locks\test-v1.lock.json"
+uv run --project services/api python -m kineticproof_api.benchmark run --dataset-root $dataset --lock "$dataset\locks\test-v1.lock.json" --output-dir "$dataset\reports\test-v1"
+```
+
+`freeze` and `run` reject dirty code. `run` also rejects a Git HEAD different from the one stored in the lock. Synthetic test media exercises the toolchain only; it is not benchmark evidence.

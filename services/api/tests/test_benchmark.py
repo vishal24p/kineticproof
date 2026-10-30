@@ -1,7 +1,10 @@
 import csv
 import json
+import os
 from pathlib import Path
+import shutil
 import statistics
+import subprocess
 from types import SimpleNamespace
 
 import cv2
@@ -13,6 +16,126 @@ from kineticproof_api.benchmark import load_event_labels, load_manifest, validat
 
 
 REPO = Path(__file__).resolve().parents[3]
+
+
+def _benchmark_cli(*args, cwd=REPO, source_root=REPO):
+    environment = os.environ | {"PYTHONPATH": str(source_root / "services" / "api" / "src")}
+    return subprocess.run(
+        ["uv", "run", "--project", str(REPO / "services" / "api"), "python", "-m", "kineticproof_api.benchmark", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=environment,
+    )
+
+
+def test_cli_help_and_subcommands():
+    help_result = _benchmark_cli("--help")
+    assert help_result.returncode == 0
+    assert "freeze" in help_result.stdout
+    assert "run" in help_result.stdout
+
+    for command in ("freeze", "run"):
+        result = _benchmark_cli(command, "--help")
+        assert result.returncode == 0
+        assert f"benchmark {command}" in result.stdout
+
+    assert _benchmark_cli().returncode == 2
+
+
+def _clean_source_repository(tmp_path):
+    source = tmp_path / "benchmark-source"
+    shutil.copytree(REPO / "services" / "api" / "src", source / "services" / "api" / "src")
+    (source / "docs").mkdir()
+    shutil.copy2(REPO / "docs" / "benchmark_results_template.csv", source / "docs")
+    for arguments in (("init",), ("config", "user.email", "test@example.invalid"),
+                      ("config", "user.name", "Benchmark test"), ("add", "."),
+                      ("commit", "-m", "benchmark source")):
+        subprocess.run(["git", "-C", str(source), *arguments], check=True, capture_output=True, text=True)
+    return source
+
+
+def _synthetic_cli_dataset(tmp_path):
+    root = tmp_path / "synthetic-private-dataset"
+    clips = root / "clips"
+    clips.mkdir(parents=True)
+    writer = cv2.VideoWriter(str(clips / "synthetic.mp4"), cv2.CAP_FFMPEG,
+                             cv2.VideoWriter_fourcc(*"mp4v"), 10, (64, 48))
+    assert writer.isOpened()
+    for index in range(6):
+        frame = np.zeros((48, 64, 3), dtype=np.uint8)
+        cv2.rectangle(frame, (8 + index, 18), (17 + index, 27), (255, 255, 255), -1)
+        writer.write(frame)
+    writer.release()
+    manifest = [{"clip_id": "synthetic-clip", "recording_session_id": "synthetic-session",
+                 "video_path": "clips/synthetic.mp4", "split": "test", "scene_condition": "clean",
+                 "initial_roi": {"x": 8, "y": 18, "width": 10, "height": 10},
+                 "motion_axis": {"x": 1, "y": 0}, "rights_status": "permitted"}]
+    (root / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (root / "labels.csv").write_text(
+        "clip_id,rater_id,event_type,timestamp_seconds,evidence_frame_index,uncertainty_seconds\n"
+        "synthetic-clip,rater-1,leftmost,0.1,1,0.01\n"
+        "synthetic-clip,rater-1,leftmost,0.3,3,0.01\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_freeze_and_run_require_locked_clean_commit(tmp_path):
+    source = _clean_source_repository(tmp_path)
+    root = _synthetic_cli_dataset(tmp_path)
+    lock = root / "lock.json"
+    (source / "dirty.txt").write_text("dirty", encoding="utf-8")
+    dirty_freeze = _benchmark_cli("freeze", "--dataset-root", str(root), "--manifest", str(root / "manifest.json"),
+                                  "--labels", str(root / "labels.csv"), "--lock", str(lock),
+                                  cwd=source, source_root=source)
+    assert dirty_freeze.returncode == 1
+    assert "clean" in dirty_freeze.stderr
+    (source / "dirty.txt").unlink()
+
+    frozen = _benchmark_cli("freeze", "--dataset-root", str(root), "--manifest", str(root / "manifest.json"),
+                            "--labels", str(root / "labels.csv"), "--lock", str(lock),
+                            cwd=source, source_root=source)
+    assert frozen.returncode == 0
+
+    (source / "dirty.txt").write_text("dirty", encoding="utf-8")
+    dirty_run = _benchmark_cli("run", "--dataset-root", str(root), "--lock", str(lock),
+                               "--output-dir", str(root / "dirty-report"), cwd=source, source_root=source)
+    assert dirty_run.returncode == 1
+    assert "clean" in dirty_run.stderr
+    subprocess.run(["git", "-C", str(source), "add", "dirty.txt"], check=True, capture_output=True, text=True)
+    subprocess.run(["git", "-C", str(source), "commit", "-m", "change source"], check=True, capture_output=True, text=True)
+    changed_head = _benchmark_cli("run", "--dataset-root", str(root), "--lock", str(lock),
+                                  "--output-dir", str(root / "changed-head-report"), cwd=source, source_root=source)
+    assert changed_head.returncode == 1
+    assert "does not match" in changed_head.stderr
+
+
+def test_synthetic_cli_freeze_run_and_mutation_rejection(tmp_path):
+    """Synthetic fixture only; generated reports are not authentic benchmark evidence."""
+    source = _clean_source_repository(tmp_path)
+    root = _synthetic_cli_dataset(tmp_path)
+    lock = root / "locks" / "synthetic.lock.json"
+    lock.parent.mkdir()
+    freeze = _benchmark_cli("freeze", "--dataset-root", str(root), "--manifest", str(root / "manifest.json"),
+                            "--labels", str(root / "labels.csv"), "--lock", str(lock),
+                            cwd=source, source_root=source)
+    assert freeze.returncode == 0, freeze.stderr
+
+    report = root / "reports" / "synthetic"
+    run = _benchmark_cli("run", "--dataset-root", str(root), "--lock", str(lock), "--output-dir", str(report),
+                         cwd=source, source_root=source)
+    assert run.returncode == 0, run.stderr
+    assert {path.name for path in report.iterdir()} == {"results.csv", "details.jsonl", "summary.json"}
+
+    labels = root / "labels.csv"
+    labels.write_text(labels.read_text(encoding="utf-8").replace(",0.3,3,", ",0.4,3,"), encoding="utf-8")
+    rejected = _benchmark_cli("run", "--dataset-root", str(root), "--lock", str(lock),
+                              "--output-dir", str(root / "reports" / "synthetic-mutated"),
+                              cwd=source, source_root=source)
+    assert rejected.returncode == 1
+    assert "Frozen test inputs" in rejected.stderr
 
 
 def video(path, frames=6, fps=10):
@@ -423,10 +546,7 @@ def test_reports_schema_and_unavailable_metrics(tmp_path, monkeypatch):
         reader = csv.DictReader(source)
         rows = list(reader)
     template = next(csv.reader((REPO / "docs" / "benchmark_results_template.csv").open(encoding="utf-8")))
-    added = {"rater_id", "rater_eligible", "rater_ineligibility_reason", "n_reference_intervals", "rater_reference_period_s",
-             "reference_period_range_s", "rater_absolute_error_s", "clip_median_absolute_error_s", "tracking_status",
-             "measurement_status", "valid_frame_fraction", "unavailable_metrics_reason"}
-    assert set(template + list(added)) <= set(reader.fieldnames)
+    assert reader.fieldnames == template
     assert len(rows) == 2
     assert rows[0]["bob_center_error_px"] == rows[0]["id_switches"] == rows[0]["matched_visible_frame_coverage"] == ""
     assert rows[0]["unavailable_metrics_reason"]

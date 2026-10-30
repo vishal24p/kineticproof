@@ -19,6 +19,23 @@ The manifest is a JSON array with one object per clip and these required fields:
 
 The separate event-label CSV requires `clip_id`, `rater_id`, `event_type`, `timestamp_seconds`, `evidence_frame_index`, and `uncertainty_seconds`; optional `notes` may be included. `rater_id` must be pseudonymous. Event types are `leftmost`, `rightmost`, or `same_direction`. Rows are grouped by clip and rater, sorted by timestamp for measurement, and duplicate timestamps for a clip/rater are rejected. Raters remain independent; the benchmark does not merge labels into a consensus.
 
+## Freeze and privacy rules
+
+Keep the private dataset root, manifest, labels, lock, and reports outside the repository. Do not commit source video, consent records, pseudonymous-rater lookup data, locks, or generated reports. A lock is a local immutable snapshot: it records the canonical test records (including ROI, motion axis, condition, and split), test-video hashes, canonical test-label hash, complete recording-session split map, scoring configuration, and source commit. It stores manifest and label paths relative to the dataset root, not local absolute paths.
+
+Freeze only from a clean Git checkout. A later run must also be clean and at the lock's exact source commit. `freeze` refuses an existing lock; changes to frozen test media, labels, manifest values, session split map, or source commit require a new local dataset revision and lock path. Dev-only content edits remain permitted only when they do not change the frozen test inputs or session split map.
+
+Example private layout (all paths local and untracked):
+
+```text
+C:\KineticProof-private\pendulum-v1\
+  manifest.json
+  labels.csv
+  clips\clip-001.mp4
+  locks\test-v1.lock.json
+  reports\test-v1\
+```
+
 ## Sourcing and annotation practice
 
 Two independent annotators when feasible; resolve disagreement transparently; never label tracker output as independent reference. Keep provenance and consent records outside public source media where needed.

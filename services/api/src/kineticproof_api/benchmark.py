@@ -1,5 +1,6 @@
-"""Private, local benchmark input validation."""
+"""Private, local benchmark input validation and execution."""
 
+import argparse
 import csv
 import hashlib
 import json
@@ -7,6 +8,8 @@ from math import isfinite
 from pathlib import Path
 import re
 import statistics
+import subprocess
+import sys
 import tempfile
 import time
 
@@ -332,6 +335,62 @@ def _write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n", encoding="utf-8")
 
 
+def _git_output(*arguments):
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(REPOSITORY_ROOT), *arguments],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise ValueError(f"Cannot inspect Git checkout: {error}") from error
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip() or "Git command failed"
+        raise ValueError(f"Cannot inspect Git checkout: {detail}")
+    return result.stdout.strip()
+
+
+def _clean_git_head():
+    head = _git_output("rev-parse", "HEAD")
+    if re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", head) is None:
+        raise ValueError("Git HEAD is not a full commit identifier")
+    if _git_output("status", "--porcelain", "--untracked-files=all"):
+        raise ValueError("Git checkout must be clean before freezing or running a benchmark")
+    return head.lower()
+
+
+def _parser():
+    parser = argparse.ArgumentParser(description="Freeze or run a private local KineticProof benchmark.")
+    commands = parser.add_subparsers(dest="command", required=True, title="commands")
+    freeze = commands.add_parser("freeze", help="validate private inputs and write a new immutable lock")
+    freeze.add_argument("--dataset-root", required=True, type=Path)
+    freeze.add_argument("--manifest", required=True, type=Path)
+    freeze.add_argument("--labels", required=True, type=Path)
+    freeze.add_argument("--lock", required=True, type=Path)
+    run = commands.add_parser("run", help="score a frozen benchmark and write reports")
+    run.add_argument("--dataset-root", required=True, type=Path)
+    run.add_argument("--lock", required=True, type=Path)
+    run.add_argument("--output-dir", required=True, type=Path)
+    return parser
+
+
+def main(argv=None):
+    args = _parser().parse_args(argv)
+    try:
+        source_commit = _clean_git_head()
+        if args.command == "freeze":
+            freeze_dataset(args.dataset_root, args.manifest, args.labels, args.lock, source_commit)
+            print(f"Frozen benchmark lock: {args.lock}")
+        else:
+            run_benchmark(args.dataset_root, args.lock, args.output_dir, source_commit)
+            print(f"Benchmark reports written: {args.output_dir}")
+    except (OSError, RuntimeError, ValueError, cv2.error) as error:
+        print(f"benchmark: error: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def run_benchmark(dataset_root, lock_path, output_dir, source_commit):
     if not isinstance(source_commit, str) or re.fullmatch(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})", source_commit) is None:
         raise ValueError("source_commit must be a full 40- or 64-character hexadecimal Git commit")
@@ -360,10 +419,10 @@ def run_benchmark(dataset_root, lock_path, output_dir, source_commit):
     template_path = REPOSITORY_ROOT / "docs" / "benchmark_results_template.csv"
     with template_path.open(newline="", encoding="utf-8-sig") as source:
         columns = next(csv.reader(source))
-    columns += ["rater_id", "rater_eligible", "rater_ineligibility_reason", "n_reference_intervals",
-        "rater_reference_period_s", "reference_period_range_s", "rater_absolute_error_s",
-        "clip_median_absolute_error_s", "tracking_status", "measurement_status", "valid_frame_fraction",
-        "unavailable_metrics_reason"]
+    columns += [column for column in ("rater_id", "rater_eligible", "rater_ineligibility_reason",
+        "n_reference_intervals", "rater_reference_period_s", "reference_period_range_s",
+        "rater_absolute_error_s", "clip_median_absolute_error_s", "tracking_status",
+        "measurement_status", "valid_frame_fraction", "unavailable_metrics_reason") if column not in columns]
     unavailable_reason = "No frame-level reference centers or visibility labels; single-target tracker has no ID-switch metric."
     details, rows, clip_scores, latencies = [], [], [], []
     counts = {condition: {"test_clip_count": 0, "tracking_failed_count": 0, "tracking_partial_count": 0,
@@ -519,3 +578,7 @@ def run_benchmark(dataset_root, lock_path, output_dir, source_commit):
         summary_path.unlink(missing_ok=True)
         raise
     return summary
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
