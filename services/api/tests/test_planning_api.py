@@ -108,6 +108,40 @@ def test_muse_dispatches_and_closes_client(planning_client, monkeypatch):
     client.close.assert_awaited_once()
 
 
+def test_muse_close_failure_after_success_returns_502(planning_client, monkeypatch):
+    client, _ = fake_muse(monkeypatch)
+    client.close.side_effect = RuntimeError("close failed")
+
+    response = planning_client.post(
+        "/api/observations/tracked/next-trial?provider=meta_muse", json=payload(),
+    )
+
+    assert response.status_code == 502
+    assert "Meta Muse provider failed" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(("failure", "status"), [("provider", 502), ("validation", 422)])
+def test_muse_close_failure_preserves_classified_error(
+    planning_client, monkeypatch, failure, status,
+):
+    client, _ = fake_muse(monkeypatch)
+    client.close.side_effect = RuntimeError("close failed")
+    if failure == "provider":
+        client.responses.create.side_effect = RuntimeError("provider unavailable")
+    else:
+        monkeypatch.setattr(
+            main, "plan_next_trial_muse",
+            AsyncMock(side_effect=ValueError("invalid local measurement")),
+        )
+
+    response = planning_client.post(
+        "/api/observations/tracked/next-trial?provider=meta_muse", json=payload(),
+    )
+
+    assert response.status_code == status
+    client.close.assert_awaited_once()
+
+
 def test_muse_missing_key_short_circuits_client(planning_client, monkeypatch):
     monkeypatch.delenv("MODEL_API_KEY", raising=False)
     constructor = Mock(side_effect=AssertionError("missing key must prevent construction"))

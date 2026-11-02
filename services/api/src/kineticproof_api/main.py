@@ -250,11 +250,18 @@ async def next_trial(
     client = AsyncOpenAI(
         base_url="https://api.meta.ai/v1", api_key=api_key, max_retries=0,
     )
+    classified_error = False
     try:
         return await plan_next_trial_muse(trace, request, client)
     except MusePlanningError as error:
+        classified_error = True
         raise HTTPException(502, str(error)) from error
     except ValueError as error:
+        classified_error = True
         raise HTTPException(422, str(error)) from error
     finally:
-        await client.close()
+        try:
+            await client.close()
+        except Exception as error:
+            if not classified_error:
+                raise HTTPException(502, "Meta Muse provider failed") from error
