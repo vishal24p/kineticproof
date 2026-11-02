@@ -13,6 +13,10 @@ type Observation = {
 };
 type Roi = { x: number; y: number; width: number; height: number };
 export default function Workspace() {
+  const [sessionStatus, setSessionStatus] = useState<
+    "pending" | "ready" | "failed"
+  >("pending");
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   const [observation, setObservation] = useState<Observation | null>(null);
   const [sourceUrl, setSourceUrl] = useState("");
   const [roi, setRoi] = useState<Roi>({ x: 0, y: 0, width: 0, height: 0 });
@@ -30,6 +34,42 @@ export default function Workspace() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("No video uploaded.");
   const dragStart = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setSessionStatus("pending");
+    setError("");
+    setNotice(
+      sessionAttempt ? "Retrying local session…" : "Preparing local session…",
+    );
+    async function prepareSession() {
+      try {
+        await checkedResponse(
+          await fetch("/api/session", {
+            method: "POST",
+            signal: controller.signal,
+          }),
+        );
+        if (!active) return;
+        setSessionStatus("ready");
+        setNotice("No video uploaded.");
+      } catch (cause) {
+        if (!active) return;
+        setSessionStatus("failed");
+        setError(
+          cause instanceof Error ? cause.message : "Session setup failed.",
+        );
+        setNotice(
+          "Session setup failed. Check that the local API is running, then retry.",
+        );
+      }
+    }
+    void prepareSession();
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [sessionAttempt]);
   useEffect(
     () => () => {
       if (sourceUrl) URL.revokeObjectURL(sourceUrl);
@@ -44,7 +84,7 @@ export default function Workspace() {
   );
 
   async function upload(file: File | undefined) {
-    if (!file || busy) return;
+    if (!file || busy || sessionStatus !== "ready") return;
     setError("");
     if (!/\.(mp4|mov)$/i.test(file.name)) {
       setError("Choose an MP4 or MOV file.");
@@ -300,7 +340,7 @@ export default function Workspace() {
             id="video-upload"
             type="file"
             accept=".mp4,.mov,video/mp4,video/quicktime"
-            disabled={busy !== null}
+            disabled={busy !== null || sessionStatus !== "ready"}
             onChange={(event) => {
               void upload(event.target.files?.[0]);
               event.target.value = "";
@@ -313,6 +353,15 @@ export default function Workspace() {
             <p role="alert" className="error-message">
               {error}
             </p>
+          )}
+          {sessionStatus === "failed" && (
+            <button
+              type="button"
+              className="action-button"
+              onClick={() => setSessionAttempt((attempt) => attempt + 1)}
+            >
+              Retry session setup
+            </button>
           )}
           {observation && (
             <>

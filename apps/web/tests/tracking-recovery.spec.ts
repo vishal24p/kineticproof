@@ -35,9 +35,78 @@ const measurement = {
   provenance: {},
 };
 
+test("keeps upload disabled until session setup succeeds", async ({ page }) => {
+  let releaseSession!: () => void;
+  const sessionHeld = new Promise<void>((resolve) => {
+    releaseSession = resolve;
+  });
+  let sessionRequested = false;
+  let uploadCount = 0;
+  await page.route("**/api/session", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    sessionRequested = true;
+    await sessionHeld;
+    await route.fulfill({ json: { status: "ok" } });
+  });
+  await page.route("**/api/observations", async (route) => {
+    uploadCount += 1;
+    await route.fulfill({
+      json: {
+        observation_id: "observation-1",
+        width: 320,
+        height: 240,
+        duration_seconds: 8,
+        frame_count: 8,
+      },
+    });
+  });
+  await page.goto("/");
+  await expect.poll(() => sessionRequested).toBe(true);
+  const upload = page.locator("#video-upload");
+  await expect(upload).toBeDisabled();
+  const file = {
+    name: "motion.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("synthetic"),
+  };
+  await upload.setInputFiles(file);
+  expect(uploadCount).toBe(0);
+  releaseSession();
+  await expect(upload).toBeEnabled();
+  await upload.setInputFiles(file);
+  await expect(page.getByText("Video ready.", { exact: false })).toBeVisible();
+  expect(uploadCount).toBe(1);
+});
+
+test("retries failed session setup before enabling upload", async ({
+  page,
+}) => {
+  let retry = false;
+  await page.route("**/api/session", (route) =>
+    retry
+      ? route.fulfill({ json: { status: "ok" } })
+      : route.fulfill({ status: 503, json: { detail: "API unavailable" } }),
+  );
+  await page.goto("/");
+  const upload = page.locator("#video-upload");
+  await expect(upload).toBeDisabled();
+  const sessionError = page.getByRole("alert").filter({ hasText: "API 503" });
+  await expect(sessionError).toBeVisible();
+  retry = true;
+  await page.getByRole("button", { name: "Retry session setup" }).click();
+  await expect(upload).toBeEnabled();
+  await expect(sessionError).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Retry session setup" }),
+  ).toHaveCount(0);
+});
+
 test("retains definite failures and isolates late tracking after a proxy timeout", async ({
   page,
 }) => {
+  await page.route("**/api/session", (route) =>
+    route.fulfill({ json: { status: "ok" } }),
+  );
   await page.addInitScript(() => {
     Object.defineProperty(HTMLVideoElement.prototype, "videoWidth", {
       configurable: true,
@@ -101,6 +170,7 @@ test("retains definite failures and isolates late tracking after a proxy timeout
   );
 
   await page.goto("/");
+  await expect(page.locator("#video-upload")).toBeEnabled();
   await page.locator("#video-upload").setInputFiles({
     name: "motion.mp4",
     mimeType: "video/mp4",
