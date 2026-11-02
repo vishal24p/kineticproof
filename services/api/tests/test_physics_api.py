@@ -43,6 +43,23 @@ def payload():
 def test_measure_unknown_observation_returns_404(measurement_client):
     response = measurement_client.post("/api/observations/unknown/measure", json=payload())
     assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_unhandled_observation_error_is_not_stored(monkeypatch):
+    def fail_measure(*args):
+        raise RuntimeError("controlled test failure")
+
+    monkeypatch.setattr(main, "measure_trace", fail_measure)
+    with TestClient(main.app, raise_server_exceptions=False) as client:
+        add_observation(client, "unhandled", [0, 1, 0])
+        response = client.post(
+            "/api/observations/unhandled/measure", json=payload()
+        )
+
+    assert response.status_code == 500
+    assert response.text == "Internal Server Error"
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_measure_without_completed_trace_returns_409(measurement_client):

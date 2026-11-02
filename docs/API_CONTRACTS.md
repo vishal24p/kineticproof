@@ -2,7 +2,7 @@
 
 ## Implemented locally — Slice 1 and Slice 2
 
-These endpoints use request/response calls with local, temporary state. Run one API process bound to localhost. No accounts, deployment, job queue or persistent storage is implemented. Uploaded media, traces and overlays disappear on process shutdown; IDs are not authorization and this API must not be exposed publicly.
+These endpoints use request/response calls with local, temporary state. Run one API process bound to localhost. No accounts, deployment, job queue or persistent storage is implemented. Uploaded media, traces and overlays remain in the app-owned temporary directory until the API process shuts down, when that directory is removed. Every `/api/observations` response, including errors and overlay files, carries `Cache-Control: no-store`; `/health` is outside this policy. IDs are not authorization and this API must not be exposed publicly. Before hosted exposure, implement authentication and per-user ownership, aggregate storage and concurrency limits, and a host-appropriate retention policy.
 
 - `GET /health`: returns `{"status":"ok"}`.
 - `POST /api/observations`: multipart `file`, MP4/MOV only with supported container brand (`isom`, `iso2`, `mp41`, `mp42`, QuickTime, AVC, AV1, or M4V), at most 100,000,000 bytes and 30 seconds. Returns `{observation_id,duration_seconds,width,height,frame_count}`. Source PTS must be available and increasing; at least two frames are required. Duration is the last source PTS minus the first.

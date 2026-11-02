@@ -189,7 +189,19 @@ def test_api_body_limit_is_installed(monkeypatch, request_spools):
     with TestClient(main.app) as client:
         response = client.post("/api/observations", files={"file": ("clip.mp4", b"x" * 13)})
         assert response.status_code == 413
+        assert response.headers["cache-control"] == "no-store"
         assert list(main.app.state.media_dir.iterdir()) == []
+
+
+def test_health_and_similarly_prefixed_path_are_not_observation_responses():
+    with TestClient(main.app) as client:
+        health = client.get("/health")
+        unrelated = client.get("/api/observations-extra")
+
+    assert health.status_code == 200
+    assert "cache-control" not in health.headers
+    assert unrelated.status_code == 404
+    assert "cache-control" not in unrelated.headers
 
 
 @pytest.mark.parametrize("suffix", [".mp4", ".mov"])
@@ -201,6 +213,7 @@ def test_upload_accepts_synthetic_video(tmp_path, suffix):
         response = client.post("/api/observations", files={
             "file": (f"private-person-name{suffix}", data, "video/mp4")})
         assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
         body = response.json()
         assert set(body) == {"observation_id", "duration_seconds", "width",
                              "height", "frame_count"}
@@ -385,6 +398,7 @@ def test_csrt_trace_and_overlay(uploaded_synthetic, tmp_path):
     overlay = client.get(f"{base}/overlay")
     assert overlay.status_code == 200
     assert overlay.headers["content-type"] == "video/mp4"
+    assert overlay.headers["cache-control"] == "no-store"
     overlay_path = tmp_path / "synthetic-overlay.mp4"
     overlay_path.write_bytes(overlay.content)
     metadata = tracking.inspect_video(overlay_path)
