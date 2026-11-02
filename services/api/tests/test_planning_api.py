@@ -15,6 +15,10 @@ from kineticproof_api.tracking import (
 @pytest.fixture
 def planning_client():
     with TestClient(main.app) as client:
+        client.post("/api/session")
+        owner_session_id = main.get_session_id(
+            client.cookies.get("kineticproof_session")
+        )
         frames = [
             TrackFrame(index, index * 0.1, None, value, 0.0, [])
             for index, value in enumerate(
@@ -27,10 +31,11 @@ def planning_client():
         )
         main.app.state.observations["tracked"] = main.Observation(
             Path("unused.mp4"), VideoMetadata(1.6, 64, 48, len(frames), 10.0),
-            TrackingRun(trace, Path("unused-overlay.mp4")),
+            owner_session_id, TrackingRun(trace, Path("unused-overlay.mp4")),
         )
         main.app.state.observations["pending"] = main.Observation(
             Path("unused.mp4"), VideoMetadata(1.6, 64, 48, len(frames), 10.0),
+            owner_session_id=owner_session_id,
         )
         yield client
 
