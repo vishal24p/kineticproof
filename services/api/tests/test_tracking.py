@@ -599,6 +599,12 @@ def test_csrt_trace_and_overlay(uploaded_synthetic, tmp_path):
     metadata = tracking.inspect_video(overlay_path)
     assert metadata.frame_count == 6
     assert (metadata.width, metadata.height) == (64, 48)
+    capture = cv2.VideoCapture(str(overlay_path), cv2.CAP_FFMPEG)
+    try:
+        assert capture.isOpened()
+        assert int(capture.get(cv2.CAP_PROP_FOURCC)) == cv2.VideoWriter_fourcc(*"VP90")
+    finally:
+        capture.release()
 
 
 def _synthetic_sam_trace(observation_id):

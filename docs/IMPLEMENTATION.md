@@ -11,7 +11,8 @@ Video validator -> safe temporary storage -> media timestamps -> OpenCV baseline
 Trajectory extraction -> cycle detection -> multi-cycle period -> uncertainty estimate -> reference/theory separation -> CSV/JSON evidence and quality warnings. Unit tests and independent manual timing. Acceptance: real calculation with traceable inputs and no hidden interpolation.
 
 ## Slice 3 — web MVP
-Setup/recording instructions; upload/target select; track review; evidence; next-trial prompt. Thin Next.js frontend, minimal accessible design. Acceptance: complete real open-stack user journey in deployed demo.
+**Status:** Local journey complete (Oct 28, 2026), verified with synthetic media. Authentic footage remains unverified; public deployment belongs to Slice 6.
+Setup/recording instructions; upload/target select; track review; evidence; next-trial prompt. Thin Next.js frontend, minimal accessible design. Acceptance: complete local open-stack user journey with inspectable evidence and honest partial/insufficient states. Deployment acceptance remains Slice 6.
 
 ## Slice 4 — experimental benchmark
 Record permitted home pendulum videos (clean/clutter/moving background), annotate independent reference cycles, run OpenCV baseline and optional open model, publish denominators and failures. Freeze test split before comparison.

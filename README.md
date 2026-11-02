@@ -6,11 +6,11 @@
 
 **Where to start:** `AGENTS.md` -> `docs/00_INDEX.md` -> `docs/PRODUCT.md` -> `docs/WORKFLOWS.md` -> `docs/ARCHITECTURE.md` -> `docs/IMPLEMENTATION.md`. Read workstream-specific documents before changing that area. No single document is intended to contain everything.
 
-**Project status:** Local API upload, OpenCV CSRT trace and overlay, pendulum measurement with JSON/CSV evidence, and template next-trial planning are implemented and tested with synthetic evidence. Explicit SAM and Muse adapters have offline tests only. Web remains a bootstrap. Authentic footage, tracking and measurement accuracy, benchmarks, deployment, and hosted Meta compatibility, entitlement, quality, latency and cost remain unverified.
+**Project status:** The local web journey includes upload, target selection, tracking review, period measurement, evidence export, and a deterministic next-trial suggestion. OpenCV and the offline template provider remain defaults; explicit SAM and Muse adapters have offline tests only. Authentic footage, tracking and measurement accuracy, benchmarks, deployment, and hosted Meta compatibility, entitlement, quality, latency and cost remain unverified.
 
 ## Implemented path and evidence status
 
-The local path is: web bootstrap -> FastAPI upload and tracking API -> app-owned temporary media and in-process observation state -> OpenCV CSRT trace -> pendulum measurement and JSON/CSV evidence. The SAM and Muse adapters are explicit options with offline tests only; hosted behavior and public deployment are unverified. See [architecture](docs/ARCHITECTURE.md) for boundaries, [evaluation](docs/EVALUATION.md) for the benchmark protocol, and [data and annotation](docs/DATA_AND_ANNOTATION.md) for collection and labeling.
+The local path is: web workspace -> FastAPI upload and tracking API -> app-owned temporary media and in-process observation state -> OpenCV CSRT trace -> pendulum measurement and JSON/CSV evidence. The SAM and Muse adapters are explicit options with offline tests only; hosted behavior and public deployment are unverified. See [architecture](docs/ARCHITECTURE.md) for boundaries, [evaluation](docs/EVALUATION.md) for the benchmark protocol, and [data and annotation](docs/DATA_AND_ANNOTATION.md) for collection and labeling.
 
 | Evidence | Current count/status |
 |---|---:|
@@ -80,6 +80,15 @@ npm --prefix apps/web run build
 npm --prefix apps/web run lint
 ```
 
-The web app uses Biome for linting and formatting checks.
+The web app uses Biome for linting and formatting checks. Its dev and production servers bind to `127.0.0.1` so the API proxy stays local to this machine.
 
-The landing page is a bootstrap placeholder. No upload or tracking controls are available yet.
+Use the four-stage local workspace:
+
+1. Read pendulum setup/recording guidance. Upload MP4/MOV (at most 100,000,000 bytes and 30 seconds).
+2. Drag around the bob on the first frame, or enter its source-pixel rectangle with the keyboard. Run OpenCV CSRT; inspect the VP9 MP4 overlay and source-timed trace. Correct the target and rerun when needed.
+3. Draw the motion axis or enter its endpoint percentages. Optionally enter independent manual timestamps/uncertainties with scrubbed evidence-frame indexes, and paired length/gravity inputs for theory. Measure; inspect measured period, cycle spread, warnings, gaps, provenance and separate manual/theory values. Download JSON evidence and CSV.
+4. Read the deterministic next-trial suggestion: recapture partial/gapped tracks, record more cycles when insufficient, or vary only length after successful measurement. Suggestions are plans, never measured results.
+
+Keyboard controls have labels and visible focus; stage links jump through the workflow. Source trace timestamps remain authoritative: overlay playback is a constant-rate preview without audio. A browser with MP4/VP9 playback is required for the overlay; source codec support varies.
+
+The frontend proxies to `http://127.0.0.1:8000` by default. To use another **local** API address, set `KINETICPROOF_API_ORIGIN` before building/starting the web app. Keep both services local. The web app establishes an anonymous HttpOnly session before enabling upload. Refresh clears the browser workspace; stopping the API deletes observations and invalidates sessions. Export before ending the session. Public deployment remains Slice 6.
