@@ -27,10 +27,43 @@ Unknown observation: 404. Known observation without a completed trace: 409. Inva
 
 Reruns publish a matching trace/overlay pair only after both outputs succeed. Failed reruns preserve the previous pair and remove incomplete new media. A `partial` trace is a completed result and can be measured. Superseded successful overlay files remain private until app shutdown so ongoing downloads can finish. An explicitly selected SAM run uploads the source under `user_data`, requests a 3600-second expiry, and attempts deletion after the response is consumed or fails; expiry is the backstop if deletion fails. This temporary retention, network latency and synchronous request/response work are local-development limits; resource controls are required before public deployment. No live SAM call has been verified.
 
+## Implemented next-trial planning (API only)
+
+`POST /api/observations/{id}/next-trial?provider=template|meta_muse` requires an existing completed trace (including a `partial` trace). The default is `template`: deterministic, offline, and does not read credentials or create a remote client. Planning is stateless: every request supplies context and recomputes measurements from the existing local trace; no experiment, suggestion, or conversation is persisted. Existing observation/media state remains process-local. The web UI does not expose this endpoint.
+
+Send JSON:
+
+```json
+{
+  "context": {
+    "question": "How does length affect period?",
+    "hypothesis": "A longer pendulum has a longer period.",
+    "focus_variable": "length_m",
+    "length_m": 0.5,
+    "release_angle_degrees": 8,
+    "background_condition": "clear",
+    "camera_fixed": true
+  },
+  "motion_axis": {"x": 1, "y": 0},
+  "reference_events": [],
+  "gravity_m_s2": 9.81
+}
+```
+
+Required context: `question` and `hypothesis` (1–500 characters each), `focus_variable` (`length_m|background_condition`), finite positive `length_m`, finite `release_angle_degrees` strictly between 0 and 90, `background_condition` (`clear|cluttered_static|moving_background_or_occlusion`), and strict boolean `camera_fixed`. `motion_axis` uses the measurement contract above. `reference_events` is optional (default `[]`) and uses the same manual-reference validation. `gravity_m_s2` is optional/null or finite positive; only when supplied is theory computed using context length. Unknown request/context fields are rejected; client measurements or provenance are not accepted.
+
+HTTP 200 returns `{provider_name, measurement, suggestion}`. `provider_name` is `template|meta_muse`; `measurement` is the full local `MeasurementResult` described above. `suggestion` contains `focus_variable`, `action`, `variable_to_change`, `held_constant`, `rationale`, and `limitation`. With insufficient evidence, action is `record_more_cycles`, changing `recording_duration` while holding `length_m`, `release_angle_degrees`, `camera_position`, and `background_condition` constant. Otherwise action is `vary_length` or `vary_background_condition`, matching the requested focus, with the other three experiment variables held constant. Rationale and limitation are nonempty strings. Suggestions are guidance, not measured facts or validated causal conclusions.
+
+Explicit `provider=meta_muse` reads `MODEL_API_KEY` from the API process environment and constructs the existing async OpenAI SDK client with `base_url=https://api.meta.ai/v1` and `max_retries=0`. It requests model `muse-spark-1.3` through Responses with `store=false`, instructions, and strict JSON-schema output via `text.format`. Local validation enforces the expected action, focus, and held constants; extra measured/predicted fields are rejected. An English lexical guard rejects numeric measurement/prediction prose, but is not a general guarantee of scientific correctness. Model output never replaces measurements.
+
+**Data sent to Meta:** all seven context fields (`question`, `hypothesis`, `focus_variable`, `length_m`, `release_angle_degrees`, `background_condition`, `camera_fixed`), plus only these server-computed measurement fields: `status`, `measured_period_seconds`, `cycle_mad_seconds`, `valid_frame_fraction`, `warnings`. The request also includes instructions and the suggestion schema. Video, frames, media paths, observation IDs and provenance are not sent as separate fields; source hashes/provenance, full traces, motion axis, reference events/notes, gravity, theoretical/manual periods, cycle details, and other measurement fields are excluded from the structured payload. Question and hypothesis text is forwarded verbatim and may contain identifying information; do not put personal information or secrets in it. `store=false` is a request setting, not a verified provider retention guarantee.
+
+Errors: unknown observation 404; no completed trace 409; invalid provider/context/local measurement input (including absent reference frames) 422; absent `MODEL_API_KEY` 503 before client construction; Muse request, incomplete response, parsing/schema or suggestion-validation failure 502. The client is closed on success/failure. There are no automatic retries or fallback to template after explicit Muse selection. Hosted compatibility, entitlement, scientific quality, latency and cost remain unverified; only offline tests with fake clients/synthetic traces have run. Confirm account access and spend authorization before any hosted request.
+
 ## Future logical design — not implemented
 
 `POST /api/experiments` create an experiment draft with kind, variables, hypotheses and consent state. Observation calibration/consent metadata, provider selection (`opencv|open_model|meta_sam`) and asynchronous jobs remain future extensions. No Meta required for the default.
 `GET /api/jobs/{id}` status+error.
-`GET /api/experiments/{id}/evidence` original/overlay plots+cycle picks+export; `POST /api/experiments/{id}/next-trial` generate grounded next trial via templates or selected validated planner.
+`GET /api/experiments/{id}/evidence` original/overlay plots+cycle picks+export. Experiment-level planning remains future; the observation-level route above is implemented.
 
 These future routes are candidates. Ownership/privacy and budget controls, idempotent jobs and bounded cleanup are required before public deployment. The web UI does not yet expose provider selection. Version schemas once implemented; never copy unverified Meta request schema into public API.

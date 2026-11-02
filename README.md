@@ -6,7 +6,7 @@
 
 **Where to start:** `AGENTS.md` -> `docs/00_INDEX.md` -> `docs/PRODUCT.md` -> `docs/WORKFLOWS.md` -> `docs/ARCHITECTURE.md` -> `docs/IMPLEMENTATION.md`. Read workstream-specific documents before changing that area. No single document is intended to contain everything.
 
-**Project status:** Local API upload, OpenCV CSRT trace and overlay, and pendulum period measurement with JSON/CSV evidence are implemented and tested with synthetic media. Web remains a bootstrap. Authentic footage, tracking and measurement accuracy, benchmarks, deployment and Meta integration remain unverified.
+**Project status:** Local API upload, OpenCV CSRT trace and overlay, pendulum measurement with JSON/CSV evidence, and template next-trial planning are implemented and tested with synthetic evidence. Explicit SAM and Muse adapters have offline tests only. Web remains a bootstrap. Authentic footage, tracking and measurement accuracy, benchmarks, deployment, and hosted Meta compatibility, entitlement, quality, latency and cost remain unverified.
 
 **Hackathon:** Meta Global AI Developer Hackathon, Indie Developer track; public GitHub repository and 3-minute demo-video URLs required by the user-inspected submission form. Deadline: Nov 4, 2026, 9:00 PM US Eastern per event; re-confirm time and local conversion at submission. See `docs/HACKATHON_RULES.md` and `docs/SUBMISSION.md`.
 
@@ -51,6 +51,10 @@ Invoke-RestMethod -Method Post `
 ```
 
 If `MODEL_API_KEY` is absent, this request returns 503 before any remote upload. SAM errors return 502 without falling back to OpenCV; omit the query parameter to use the offline OpenCV path.
+
+Next-trial planning uses a completed observation trace. `POST /api/observations/{id}/next-trial` defaults to the offline `template` provider and needs no key. Send pendulum context, motion axis, and optional manual references/gravity; the response separates freshly computed local measurements from one suggestion. See [request example, exact fields and errors](docs/API_CONTRACTS.md#implemented-next-trial-planning-api-only).
+
+Hosted Muse requires explicit `?provider=meta_muse` and `MODEL_API_KEY`. It sends context (including question/hypothesis text) and only measurement status, period, cycle MAD, valid-frame fraction, and warnings to Meta; observation IDs and provenance are not sent as separate fields. Question and hypothesis text is forwarded verbatim and may contain identifying information, so keep personal data and secrets out of it. Missing key returns 503; provider/response-validation errors return 502 with no automatic retry or template fallback. The request uses `store=false`; provider retention and live behavior are unverified. Confirm account access and spend authorization before a hosted call. No live or paid Muse request has been made. Planning is stateless and API-only; no experiment record or conversation is stored and the web UI has no planning controls.
 
 Start the web app in another terminal, then open [localhost:3000](http://localhost:3000):
 
