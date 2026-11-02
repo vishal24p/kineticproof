@@ -205,6 +205,19 @@ def test_api_body_limit_is_installed(monkeypatch, request_spools):
         assert list(main.app.state.media_dir.iterdir()) == []
 
 
+def test_missing_session_rejects_oversized_upload_before_body_limit(monkeypatch):
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
+    monkeypatch.setattr(main, "MULTIPART_ALLOWANCE_BYTES", 4)
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/api/observations", files={"file": ("clip.mp4", b"x" * 13)},
+        )
+        assert response.status_code == 401
+        assert response.headers["cache-control"] == "no-store"
+        assert main.app.state.observations == {}
+        assert list(main.app.state.media_dir.iterdir()) == []
+
+
 def test_health_and_similarly_prefixed_path_are_not_observation_responses():
     with TestClient(main.app) as client:
         health = client.get("/health")
@@ -464,6 +477,32 @@ def test_observation_endpoints_require_session(uploaded_synthetic, method, route
         **({"json": body} if body is not None else {}),
     )
     assert response.status_code == 401
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("route", ["tracking", "measure", "next-trial"])
+@pytest.mark.parametrize("cookie", [None, "invalid"])
+def test_invalid_session_rejects_malformed_json_before_validation(route, cookie):
+    with TestClient(main.app) as client:
+        if cookie is not None:
+            client.cookies.set("kineticproof_session", cookie, path="/api")
+        response = client.post(
+            f"/api/observations/unknown/{route}",
+            content="{", headers={"content-type": "application/json"},
+        )
+    assert response.status_code == 401
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("route", ["tracking", "measure", "next-trial"])
+def test_authenticated_malformed_json_keeps_validation_error(route):
+    with TestClient(main.app) as client:
+        start_session(client)
+        response = client.post(
+            f"/api/observations/unknown/{route}",
+            content="{", headers={"content-type": "application/json"},
+        )
+    assert response.status_code == 422
     assert response.headers["cache-control"] == "no-store"
 
 

@@ -12,6 +12,7 @@ from uuid import uuid4
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, UploadFile
 from openai import AsyncOpenAI
 from starlette.concurrency import run_in_threadpool
+from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 
 from kineticproof_api.physics import (
@@ -106,6 +107,26 @@ class ObservationNoStore:
         await self.app(scope, receive, send_no_store)
 
 
+class ObservationSessionGuard:
+    def __init__(self, app):
+        self.app = app
+        self.state = app.state
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if scope["type"] == "http" and (
+            path == "/api/observations" or path.startswith("/api/observations/")
+        ):
+            cookie = Request(scope).cookies.get("kineticproof_session")
+            if not valid_session_id(cookie, self.app.state.session_signing_key):
+                response = JSONResponse(
+                    {"detail": "A valid session cookie is required"}, 401,
+                )
+                await response(scope, receive, send)
+                return
+        await self.app(scope, receive, send)
+
+
 @dataclass
 class Observation:
     source_path: Path
@@ -135,11 +156,9 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def get_session_id(
-    cookie: str | None = Cookie(default=None, alias="kineticproof_session"),
-) -> str:
+def valid_session_id(cookie: str | None, signing_key: bytes) -> str | None:
     if cookie is None:
-        raise HTTPException(401, "A valid session cookie is required")
+        return None
     session_id, separator, signature = cookie.partition(".")
     if (
         not separator or len(session_id) != 43 or len(signature) != 64
@@ -149,11 +168,20 @@ def get_session_id(
         )
         or any(char not in "0123456789abcdef" for char in signature)
     ):
-        raise HTTPException(401, "A valid session cookie is required")
+        return None
     expected = hmac.new(
-        app.state.session_signing_key, session_id.encode("ascii"), hashlib.sha256,
+        signing_key, session_id.encode("ascii"), hashlib.sha256,
     ).hexdigest()
     if not hmac.compare_digest(signature, expected):
+        return None
+    return session_id
+
+
+def get_session_id(
+    cookie: str | None = Cookie(default=None, alias="kineticproof_session"),
+) -> str:
+    session_id = valid_session_id(cookie, app.state.session_signing_key)
+    if session_id is None:
         raise HTTPException(401, "A valid session cookie is required")
     return session_id
 
@@ -360,4 +388,4 @@ async def next_trial(
                 raise HTTPException(502, "Meta Muse provider failed") from error
 
 
-app = ObservationNoStore(app)
+app = ObservationNoStore(ObservationSessionGuard(app))
