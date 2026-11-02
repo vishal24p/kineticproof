@@ -27,7 +27,13 @@ export async function checkedResponse(response: Response) {
       : body?.detail
         ? JSON.stringify(body.detail)
         : response.statusText;
+  const recovery =
+    response.status === 401
+      ? " Local session expired; refresh the page and re-upload your video. An API restart clears local observations."
+      : response.status === 404
+        ? " Local observation unavailable; upload again after an API restart."
+        : "";
   throw new Error(
-    `API ${response.status}: ${detail || "Request failed"}.${response.status === 404 ? " Local observation unavailable; upload again after an API restart." : ""}`,
+    `API ${response.status}: ${detail || "Request failed"}.${recovery}`,
   );
 }

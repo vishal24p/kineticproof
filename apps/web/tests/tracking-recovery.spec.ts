@@ -101,6 +101,33 @@ test("retries failed session setup before enabling upload", async ({
   ).toHaveCount(0);
 });
 
+test("explains that a 401 requires refreshing and re-uploading", async ({
+  page,
+}) => {
+  await page.route("**/api/session", (route) =>
+    route.fulfill({ json: { status: "ok" } }),
+  );
+  await page.route("**/api/observations", (route) =>
+    route.fulfill({
+      status: 401,
+      json: { detail: "A valid session cookie is required" },
+    }),
+  );
+
+  await page.goto("/");
+  const upload = page.locator("#video-upload");
+  await expect(upload).toBeEnabled();
+  await upload.setInputFiles({
+    name: "motion.mp4",
+    mimeType: "video/mp4",
+    buffer: Buffer.from("synthetic"),
+  });
+
+  await expect(page.getByText("API 401:", { exact: false })).toContainText(
+    "Local session expired; refresh the page and re-upload your video.",
+  );
+});
+
 test("retains definite failures and isolates late tracking after a proxy timeout", async ({
   page,
 }) => {
