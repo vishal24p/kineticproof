@@ -43,6 +43,7 @@ def payload():
 def test_measure_unknown_observation_returns_404(measurement_client):
     response = measurement_client.post("/api/observations/unknown/measure", json=payload())
     assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_measure_without_completed_trace_returns_409(measurement_client):

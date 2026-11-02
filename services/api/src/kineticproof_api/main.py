@@ -77,6 +77,30 @@ class UploadBodyLimit:
             await self.app(scope, replay, send)
 
 
+class ObservationNoStore:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "")
+        if scope["type"] != "http" or not (
+            path == "/api/observations" or path.startswith("/api/observations/")
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_no_store(message):
+            if message["type"] == "http.response.start":
+                headers = [
+                    (name, value) for name, value in message.get("headers", [])
+                    if name.lower() != b"cache-control"
+                ]
+                message = {**message, "headers": [*headers, (b"cache-control", b"no-store")]}
+            await send(message)
+
+        await self.app(scope, receive, send_no_store)
+
+
 @dataclass
 class Observation:
     source_path: Path
@@ -97,6 +121,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="KineticProof API", lifespan=lifespan)
 app.add_middleware(UploadBodyLimit)
+app.add_middleware(ObservationNoStore)
 
 
 @app.get("/health")

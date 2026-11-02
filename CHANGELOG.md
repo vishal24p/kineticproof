@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.1.0] - 2026-11-02
+
+### Security
+
+- Prevent caching of observation API responses, including errors and overlay files; document process-lifetime local retention and hosted deployment requirements.
+
 ## [0.6.0.0] - 2026-11-02
 
 ### Added

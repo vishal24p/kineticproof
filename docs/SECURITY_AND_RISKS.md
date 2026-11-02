@@ -1,6 +1,7 @@
 # Privacy, cost, delivery and scientific risk controls
 
 - **Media privacy:** avoid filming identifiable people when possible; secure consent for anyone included; publish only permissioned footage; purge uploads by explicit retention policy, not assumptions.
+- **Local API retention:** uploaded media, traces and overlays live in the app-owned temporary directory until process shutdown. Observation API responses use `Cache-Control: no-store`; this does not provide authentication, ownership isolation, storage/concurrency bounds, or a hosted retention policy. Do not expose publicly until authentication and per-user ownership, aggregate storage and concurrency limits, and host-specific retention are defined and implemented.
 - **API spend:** free credits applied != unlimited free calls. Obtain user approval for card, hard budget, max jobs/retries and cloud resources before paid activity. Spend alerts may not be hard caps.
 - **Supply chain:** inspect any MCP/agent skill install scripts, packages, weights licenses and required permissions. Existing GStack/ECC don't have to be installed twice.
 - **Measurement validity:** frame timing errors, occlusion, wrong target, camera movement, foreshortening, short/variable cycles; show warnings and independent references.
