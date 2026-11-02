@@ -80,6 +80,7 @@ class UploadBodyLimit:
 class ObservationNoStore:
     def __init__(self, app):
         self.app = app
+        self.state = app.state
 
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
@@ -121,7 +122,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="KineticProof API", lifespan=lifespan)
 app.add_middleware(UploadBodyLimit)
-app.add_middleware(ObservationNoStore)
 
 
 @app.get("/health")
@@ -295,3 +295,6 @@ async def next_trial(
         except Exception as error:
             if not classified_error:
                 raise HTTPException(502, "Meta Muse provider failed") from error
+
+
+app = ObservationNoStore(app)
