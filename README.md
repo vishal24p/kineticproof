@@ -6,7 +6,18 @@
 
 **Where to start:** `AGENTS.md` -> `docs/00_INDEX.md` -> `docs/PRODUCT.md` -> `docs/WORKFLOWS.md` -> `docs/ARCHITECTURE.md` -> `docs/IMPLEMENTATION.md`. Read workstream-specific documents before changing that area. No single document is intended to contain everything.
 
-**Project status:** Local API upload, OpenCV CSRT trace and overlay, and pendulum period measurement with JSON/CSV evidence are implemented and tested with synthetic media. The local web journey includes upload, target selection, track review, axis/manual/theory inputs, measurement, evidence export and deterministic next-trial suggestions. Authentic footage, tracking and measurement accuracy, benchmarks, deployment and Meta integration remain unverified.
+**Project status:** The local web journey includes upload, target selection, tracking review, period measurement, evidence export, and a deterministic next-trial suggestion. OpenCV and the offline template provider remain defaults; explicit SAM and Muse adapters have offline tests only. Authentic footage, tracking and measurement accuracy, benchmarks, deployment, and hosted Meta compatibility, entitlement, quality, latency and cost remain unverified.
+
+## Implemented path and evidence status
+
+The local path is: web workspace -> FastAPI upload and tracking API -> app-owned temporary media and in-process observation state -> OpenCV CSRT trace -> pendulum measurement and JSON/CSV evidence. The SAM and Muse adapters are explicit options with offline tests only; hosted behavior and public deployment are unverified. See [architecture](docs/ARCHITECTURE.md) for boundaries, [evaluation](docs/EVALUATION.md) for the benchmark protocol, and [data and annotation](docs/DATA_AND_ANNOTATION.md) for collection and labeling.
+
+| Evidence | Current count/status |
+|---|---:|
+| Verified dataset clips | 0 |
+| Independent reference labels | 0 |
+| Benchmark runs/results | 0 |
+| Benchmark metrics | Unavailable |
 
 **Hackathon:** Meta Global AI Developer Hackathon, Indie Developer track; public GitHub repository and 3-minute demo-video URLs required by the user-inspected submission form. Deadline: Nov 4, 2026, 9:00 PM US Eastern per event; re-confirm time and local conversion at submission. See `docs/HACKATHON_RULES.md` and `docs/SUBMISSION.md`.
 
@@ -38,6 +49,24 @@ uv run --project services/api pytest -c services/api/pyproject.toml services/api
 
 The health endpoint returns `{"status":"ok"}`. Local upload, tracking, trace, overlay and period measurement endpoints are described in [API contracts](docs/API_CONTRACTS.md).
 
+OpenCV CSRT is the default tracking provider. The API also has an explicit SAM 3.1 path: set `MODEL_API_KEY` in the API process environment, upload only a permitted clip, then request `provider=meta_sam` with the same first-frame ROI. Do not commit the key. SAM uploads are requested to expire after one hour and are deleted after the response is parsed; no live SAM call or result has been verified. The endpoint may incur Meta charges, so use it only after confirming account access and spend authorization.
+
+PowerShell example, using an observation ID returned by the local upload endpoint:
+
+```powershell
+$observationId = '<observation ID from upload>'
+$roi = @{ x = 120; y = 80; width = 40; height = 40 } | ConvertTo-Json
+Invoke-RestMethod -Method Post `
+  -Uri "http://127.0.0.1:8000/api/observations/$observationId/tracking?provider=meta_sam" `
+  -ContentType 'application/json' -Body $roi
+```
+
+If `MODEL_API_KEY` is absent, this request returns 503 before any remote upload. SAM errors return 502 without falling back to OpenCV; omit the query parameter to use the offline OpenCV path.
+
+Next-trial planning uses a completed observation trace. `POST /api/observations/{id}/next-trial` defaults to the offline `template` provider and needs no key. Send pendulum context, motion axis, and optional manual references/gravity; the response separates freshly computed local measurements from one suggestion. See [request example, exact fields and errors](docs/API_CONTRACTS.md#implemented-next-trial-planning-api-only).
+
+Hosted Muse requires explicit `?provider=meta_muse` and `MODEL_API_KEY`. It sends context (including question/hypothesis text) and only measurement status, period, cycle MAD, valid-frame fraction, and warnings to Meta; observation IDs and provenance are not sent as separate fields. Question and hypothesis text is forwarded verbatim and may contain identifying information, so keep personal data and secrets out of it. Missing key returns 503; provider/response-validation errors return 502 with no automatic retry or template fallback. The request uses `store=false`; provider retention and live behavior are unverified. Confirm account access and spend authorization before a hosted call. No live or paid Muse request has been made. Planning is stateless and API-only; no experiment record or conversation is stored and the web UI has no planning controls.
+
 Start the web app in another terminal, then open [localhost:3000](http://localhost:3000):
 
 ```powershell
@@ -62,4 +91,4 @@ Use the four-stage local workspace:
 
 Keyboard controls have labels and visible focus; stage links jump through the workflow. Source trace timestamps remain authoritative: overlay playback is a constant-rate preview without audio. A browser with MP4/VP9 playback is required for the overlay; source codec support varies.
 
-The frontend proxies to `http://127.0.0.1:8000` by default. To use another **local** API address, set `KINETICPROOF_API_ORIGIN` before building/starting the web app. Keep both services local. Refresh clears the browser workspace; stopping the API deletes uploaded observations. Export before ending the session. Public deployment remains Slice 6.
+The frontend proxies to `http://127.0.0.1:8000` by default. To use another **local** API address, set `KINETICPROOF_API_ORIGIN` before building/starting the web app. Keep both services local. The web app establishes an anonymous HttpOnly session before enabling upload. Refresh clears the browser workspace; stopping the API deletes observations and invalidates sessions. Export before ending the session. Public deployment remains Slice 6.

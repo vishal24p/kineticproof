@@ -43,9 +43,16 @@ def synthetic_video(path: Path, frame_count=6, fps=10.0) -> bytes:
     return path.read_bytes()
 
 
+def start_session(client):
+    response = client.post("/api/session")
+    assert response.status_code == 200
+    return response.cookies["kineticproof_session"]
+
+
 def test_renamed_avi_container_is_rejected(tmp_path):
     data = synthetic_video(tmp_path / "synthetic.avi")
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={"file": ("clip.mp4", data)})
         assert response.status_code == 415
         assert list(main.app.state.media_dir.iterdir()) == []
@@ -58,6 +65,7 @@ def test_renamed_unsupported_major_brand_is_rejected(tmp_path, brand):
     assert data[4:8] == b"ftyp"
     data[8:12] = brand
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={"file": ("clip.mp4", bytes(data))})
         assert response.status_code == 415
         assert list(main.app.state.media_dir.iterdir()) == []
@@ -69,6 +77,7 @@ def test_unbranded_container_is_rejected(tmp_path):
     assert data[4:8] == b"ftyp"
     data[4:8] = b"free"
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={"file": ("clip.mov", bytes(data))})
         assert response.status_code == 415
         assert list(main.app.state.media_dir.iterdir()) == []
@@ -81,6 +90,7 @@ def test_supported_major_brands_are_accepted(tmp_path, brand):
     data = bytearray(synthetic_video(tmp_path / "synthetic.mp4"))
     data[8:12] = brand
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={"file": ("clip.mp4", bytes(data))})
         assert response.status_code == 200
 
@@ -88,6 +98,7 @@ def test_supported_major_brands_are_accepted(tmp_path, brand):
 def test_single_frame_zero_pts_is_rejected(tmp_path):
     data = synthetic_video(tmp_path / "synthetic-single.mp4", frame_count=1)
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={"file": ("clip.mp4", data)})
         assert response.status_code == 422
         assert "timestamp" in response.json()["detail"]
@@ -187,9 +198,35 @@ def test_api_body_limit_is_installed(monkeypatch, request_spools):
     monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
     monkeypatch.setattr(main, "MULTIPART_ALLOWANCE_BYTES", 4)
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={"file": ("clip.mp4", b"x" * 13)})
         assert response.status_code == 413
+        assert response.headers["cache-control"] == "no-store"
         assert list(main.app.state.media_dir.iterdir()) == []
+
+
+def test_missing_session_rejects_oversized_upload_before_body_limit(monkeypatch):
+    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 8)
+    monkeypatch.setattr(main, "MULTIPART_ALLOWANCE_BYTES", 4)
+    with TestClient(main.app) as client:
+        response = client.post(
+            "/api/observations", files={"file": ("clip.mp4", b"x" * 13)},
+        )
+        assert response.status_code == 401
+        assert response.headers["cache-control"] == "no-store"
+        assert main.app.state.observations == {}
+        assert list(main.app.state.media_dir.iterdir()) == []
+
+
+def test_health_and_similarly_prefixed_path_are_not_observation_responses():
+    with TestClient(main.app) as client:
+        health = client.get("/health")
+        unrelated = client.get("/api/observations-extra")
+
+    assert health.status_code == 200
+    assert "cache-control" not in health.headers
+    assert unrelated.status_code == 404
+    assert "cache-control" not in unrelated.headers
 
 
 @pytest.mark.parametrize("suffix", [".mp4", ".mov"])
@@ -198,9 +235,13 @@ def test_upload_accepts_synthetic_video(tmp_path, suffix):
     if suffix == ".mov":
         assert data[4:12] == b"ftypqt  ", "Fixture must use a real MOV container"
     with TestClient(main.app) as client:
+        cookie = start_session(client)
         response = client.post("/api/observations", files={
             "file": (f"private-person-name{suffix}", data, "video/mp4")})
         assert response.status_code == 200
+        assert response.headers.get("set-cookie") is None
+        assert client.cookies["kineticproof_session"] == cookie
+        assert response.headers["cache-control"] == "no-store"
         body = response.json()
         assert set(body) == {"observation_id", "duration_seconds", "width",
                              "height", "frame_count"}
@@ -217,6 +258,7 @@ def test_upload_accepts_synthetic_video(tmp_path, suffix):
 ])
 def test_rejection_leaves_no_files(filename, data, status):
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={"file": (filename, data)})
         assert response.status_code == status
         assert list(main.app.state.media_dir.iterdir()) == []
@@ -226,6 +268,7 @@ def test_rejection_leaves_no_files(filename, data, status):
 def test_upload_byte_counter_rejects_and_cleans_partial_file(monkeypatch):
     monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 1024 * 1024)
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={
             "file": ("clip.mp4", b"x" * (1024 * 1024 + 1))})
         assert response.status_code == 413
@@ -235,6 +278,7 @@ def test_upload_byte_counter_rejects_and_cleans_partial_file(monkeypatch):
 def test_long_synthetic_video_rejected_and_removed(tmp_path):
     data = synthetic_video(tmp_path / "synthetic-long.mp4", frame_count=312)
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={"file": ("clip.mp4", data)})
         assert response.status_code == 413
         assert list(main.app.state.media_dir.iterdir()) == []
@@ -244,6 +288,7 @@ def test_shutdown_removes_only_app_owned_media(tmp_path):
     source = tmp_path / "synthetic.mp4"
     data = synthetic_video(source)
     with TestClient(main.app) as client:
+        start_session(client)
         assert client.post("/api/observations", files={"file": ("clip.mp4", data)}).status_code == 200
         media_dir = main.app.state.media_dir
         assert list(media_dir.iterdir())
@@ -254,6 +299,7 @@ def test_shutdown_removes_only_app_owned_media(tmp_path):
 def test_truncated_synthetic_upload_rejected_and_removed(tmp_path):
     data = synthetic_video(tmp_path / "synthetic.mp4")
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={
             "file": ("clip.mp4", data[:len(data) // 2])})
         assert response.status_code == 422
@@ -274,6 +320,7 @@ def test_upload_read_failure_removes_partial_file(monkeypatch):
 
     monkeypatch.setattr(UploadFile, "read", interrupted_read)
     with TestClient(main.app) as client:
+        start_session(client)
         with pytest.raises(OSError, match="interrupted"):
             client.post("/api/observations", files={"file": ("clip.mp4", b"video")})
         assert list(main.app.state.media_dir.iterdir()) == []
@@ -327,6 +374,7 @@ def test_inspection_rejects_missing_or_nonmonotonic_pts(monkeypatch, tmp_path, t
 def uploaded_synthetic(tmp_path):
     data = synthetic_video(tmp_path / "synthetic-tracking.mp4")
     with TestClient(main.app) as client:
+        start_session(client)
         response = client.post("/api/observations", files={"file": ("clip.mp4", data)})
         assert response.status_code == 200
         yield client, response.json()["observation_id"], data
@@ -336,9 +384,169 @@ def uploaded_synthetic(tmp_path):
                                          ("overlay", "get")])
 def test_unknown_tracking_observation(route, method):
     with TestClient(main.app) as client:
+        start_session(client)
         response = getattr(client, method)(f"/api/observations/unknown/{route}",
             **({"json": {"x": 0, "y": 12, "width": 13, "height": 13}} if method == "post" else {}))
         assert response.status_code == 404
+
+
+def test_session_cookie_bootstrap_and_reuse(monkeypatch):
+    monkeypatch.delenv("KINETICPROOF_COOKIE_SECURE", raising=False)
+    with TestClient(main.app) as client:
+        response = client.post("/api/session")
+        cookie = response.cookies["kineticproof_session"]
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+        assert response.headers["cache-control"] == "no-store"
+        assert "httponly" in response.headers["set-cookie"].lower()
+        assert "samesite=strict" in response.headers["set-cookie"].lower()
+        assert "path=/api" in response.headers["set-cookie"].lower()
+        assert "domain=" not in response.headers["set-cookie"].lower()
+        assert "expires=" not in response.headers["set-cookie"].lower()
+        assert "max-age=" not in response.headers["set-cookie"].lower()
+        assert "secure" not in response.headers["set-cookie"].lower()
+        session_id, signature = cookie.split(".")
+        assert len(session_id) == 43
+        assert len(signature) == 64
+        assert all(char in "0123456789abcdef" for char in signature)
+
+        repeated = client.post("/api/session")
+        assert repeated.status_code == 200
+        assert repeated.headers.get("set-cookie") is None
+        assert client.cookies["kineticproof_session"] == cookie
+
+
+def test_session_cookie_secure_flag_follows_environment(monkeypatch):
+    monkeypatch.setenv("KINETICPROOF_COOKIE_SECURE", "1")
+    with TestClient(main.app) as client:
+        response = client.post("/api/session")
+    assert "secure" in response.headers["set-cookie"].lower()
+
+
+@pytest.mark.parametrize("value", ["0", "true", ""])
+def test_session_cookie_secure_is_off_unless_value_is_one(monkeypatch, value):
+    monkeypatch.setenv("KINETICPROOF_COOKIE_SECURE", value)
+    with TestClient(main.app) as client:
+        response = client.post("/api/session")
+    assert "secure" not in response.headers["set-cookie"].lower()
+
+
+def test_malformed_session_cookie_is_replaced():
+    with TestClient(main.app) as client:
+        client.cookies.set("kineticproof_session", "malformed", path="/api")
+        response = client.post("/api/session")
+    assert response.status_code == 200
+    assert "kineticproof_session=" in response.headers["set-cookie"]
+    assert "malformed" not in response.headers["set-cookie"]
+
+
+def test_observation_routes_require_session_and_health_stays_public():
+    with TestClient(main.app) as client:
+        media_dir = main.app.state.media_dir
+        client.cookies.clear()
+        health = client.get("/health")
+        upload = client.post("/api/observations", files={"file": ("clip.mp4", b"x")})
+        tracks = client.get("/api/observations/unknown/tracks")
+        assert list(media_dir.iterdir()) == []
+        assert main.app.state.observations == {}
+    assert health.status_code == 200
+    assert upload.status_code == 401
+    assert tracks.status_code == 401
+
+
+@pytest.mark.parametrize(("method", "route", "body"), [
+    ("post", "tracking", {"x": 0, "y": 12, "width": 13, "height": 13}),
+    ("get", "tracks", None),
+    ("get", "overlay", None),
+    ("post", "measure", {"motion_axis": {"x": 1, "y": 0}}),
+    ("post", "next-trial", {
+        "context": {
+            "question": "Question?", "hypothesis": "Hypothesis.",
+            "focus_variable": "length_m", "length_m": 0.5,
+            "release_angle_degrees": 8, "background_condition": "clear",
+            "camera_fixed": True,
+        },
+        "motion_axis": {"x": 1, "y": 0},
+    }),
+])
+def test_observation_endpoints_require_session(uploaded_synthetic, method, route, body):
+    client, observation_id, _ = uploaded_synthetic
+    client.cookies.clear()
+    response = getattr(client, method)(
+        f"/api/observations/{observation_id}/{route}",
+        **({"json": body} if body is not None else {}),
+    )
+    assert response.status_code == 401
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("route", ["tracking", "measure", "next-trial"])
+@pytest.mark.parametrize("cookie", [None, "invalid"])
+def test_invalid_session_rejects_malformed_json_before_validation(route, cookie):
+    with TestClient(main.app) as client:
+        if cookie is not None:
+            client.cookies.set("kineticproof_session", cookie, path="/api")
+        response = client.post(
+            f"/api/observations/unknown/{route}",
+            content="{", headers={"content-type": "application/json"},
+        )
+    assert response.status_code == 401
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("route", ["tracking", "measure", "next-trial"])
+def test_authenticated_malformed_json_keeps_validation_error(route):
+    with TestClient(main.app) as client:
+        start_session(client)
+        response = client.post(
+            f"/api/observations/unknown/{route}",
+            content="{", headers={"content-type": "application/json"},
+        )
+    assert response.status_code == 422
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize(("method", "route", "body"), [
+    ("post", "tracking", {"x": 0, "y": 12, "width": 13, "height": 13}),
+    ("get", "tracks", None),
+    ("get", "overlay", None),
+    ("post", "measure", {"motion_axis": {"x": 1, "y": 0}}),
+    ("post", "next-trial", {
+        "context": {
+            "question": "Question?", "hypothesis": "Hypothesis.",
+            "focus_variable": "length_m", "length_m": 0.5,
+            "release_angle_degrees": 8, "background_condition": "clear",
+            "camera_fixed": True,
+        },
+        "motion_axis": {"x": 1, "y": 0},
+    }),
+])
+def test_foreign_session_cannot_access_observation(uploaded_synthetic, method, route, body):
+    client, observation_id, _ = uploaded_synthetic
+    client.cookies.clear()
+    client.cookies.set("kineticproof_session", "invalid", path="/api")
+    start_session(client)
+    response = getattr(client, method)(
+        f"/api/observations/{observation_id}/{route}",
+        **({"json": body} if body is not None else {}),
+    )
+    assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_invalid_signature_is_rejected(uploaded_synthetic):
+    client, observation_id, _ = uploaded_synthetic
+    cookie = client.cookies["kineticproof_session"]
+    session_id, signature = cookie.split(".")
+    changed_last_character = "0" if signature[-1] != "0" else "1"
+    client.cookies.clear()
+    client.cookies.set(
+        "kineticproof_session",
+        f"{session_id}.{signature[:-1]}{changed_last_character}", path="/api",
+    )
+    response = client.get(f"/api/observations/{observation_id}/tracks")
+    assert response.status_code == 401
+    assert response.headers["cache-control"] == "no-store"
 
 
 @pytest.mark.parametrize("route", ["tracks", "overlay"])
@@ -370,7 +578,8 @@ def test_csrt_trace_and_overlay(uploaded_synthetic, tmp_path):
     assert trace["failures"] == []
     assert trace["provenance"] == {"source_video_sha256": sha256(source).hexdigest(),
         "preprocessing": "none", "timebase_seconds_per_tick": 0.1,
-        "requested_frames": 6, "opencv_version": cv2.__version__}
+        "requested_frames": 6, "opencv_version": cv2.__version__,
+        "provider_request_id": None}
     assert [frame["frame_index"] for frame in trace["frames"]] == list(range(6))
     assert [frame["timestamp_seconds"] for frame in trace["frames"]] == pytest.approx([0, .1, .2, .3, .4, .5])
     assert all(frame["quality_flags"] == [] for frame in trace["frames"])
@@ -384,6 +593,7 @@ def test_csrt_trace_and_overlay(uploaded_synthetic, tmp_path):
     overlay = client.get(f"{base}/overlay")
     assert overlay.status_code == 200
     assert overlay.headers["content-type"] == "video/mp4"
+    assert overlay.headers["cache-control"] == "no-store"
     overlay_path = tmp_path / "synthetic-overlay.mp4"
     overlay_path.write_bytes(overlay.content)
     metadata = tracking.inspect_video(overlay_path)
@@ -395,6 +605,124 @@ def test_csrt_trace_and_overlay(uploaded_synthetic, tmp_path):
         assert int(capture.get(cv2.CAP_PROP_FOURCC)) == cv2.VideoWriter_fourcc(*"VP90")
     finally:
         capture.release()
+
+
+def _synthetic_sam_trace(observation_id):
+    frames = [tracking.TrackFrame(
+        index, index / 10, tracking.BoundingBox(0, 12, 13, 13), 6.5, 18.5, [],
+    ) for index in range(6)]
+    return tracking.TrackResult(
+        "1.0.0", None, observation_id, "meta_sam", "sam-3.1", "3.1",
+        "meta-sam-3.1-forward-box-v1", "succeeded", frames, [],
+        tracking.Provenance("synthetic-test-hash", "none", 0.1, 6,
+                            provider_request_id="synthetic-test-request"),
+    )
+
+
+def test_explicit_opencv_provider_uses_existing_trace(uploaded_synthetic):
+    client, observation_id, _ = uploaded_synthetic
+    response = client.post(
+        f"/api/observations/{observation_id}/tracking?provider=opencv",
+        json={"x": 0, "y": 12, "width": 13, "height": 13},
+    )
+    assert response.status_code == 200
+    assert client.get(f"/api/observations/{observation_id}/tracks").json()["provider_name"] == "opencv"
+
+
+def test_invalid_tracking_provider_is_rejected(uploaded_synthetic):
+    client, observation_id, _ = uploaded_synthetic
+    response = client.post(
+        f"/api/observations/{observation_id}/tracking?provider=unknown",
+        json={"x": 0, "y": 12, "width": 13, "height": 13},
+    )
+    assert response.status_code == 422
+    assert client.get(f"/api/observations/{observation_id}/tracks").status_code == 409
+
+
+def test_sam_provider_without_key_never_constructs_client(uploaded_synthetic, monkeypatch):
+    client, observation_id, _ = uploaded_synthetic
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    monkeypatch.setattr(main, "AsyncOpenAI", lambda **kwargs: pytest.fail("client must not be constructed"))
+
+    response = client.post(
+        f"/api/observations/{observation_id}/tracking?provider=meta_sam",
+        json={"x": 0, "y": 12, "width": 13, "height": 13},
+    )
+    assert response.status_code == 503
+    assert client.get(f"/api/observations/{observation_id}/tracks").status_code == 409
+
+
+def test_sam_provider_is_explicit_and_closes_client(uploaded_synthetic, monkeypatch):
+    client, observation_id, _ = uploaded_synthetic
+    monkeypatch.setenv("MODEL_API_KEY", "test-only-key")
+    client_options = {}
+
+    class FakeMetaClient:
+        closed = False
+
+        async def close(self):
+            self.closed = True
+
+    fake_client = FakeMetaClient()
+
+    def build_client(**kwargs):
+        client_options.update(kwargs)
+        return fake_client
+
+    async def fake_sam_tracker(source_path, metadata, roi, requested_id, overlay_path, used_client):
+        assert source_path.exists()
+        assert requested_id == observation_id
+        assert (roi.x, roi.y, roi.width, roi.height) == (0, 12, 13, 13)
+        assert used_client is fake_client
+        overlay_path.write_bytes(b"synthetic test overlay")
+        return _synthetic_sam_trace(requested_id)
+
+    monkeypatch.setattr(main, "AsyncOpenAI", build_client)
+    monkeypatch.setattr(main, "track_sam_video", fake_sam_tracker)
+    response = client.post(
+        f"/api/observations/{observation_id}/tracking?provider=meta_sam",
+        json={"x": 0, "y": 12, "width": 13, "height": 13},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "succeeded", "frame_count": 6}
+    assert client.get(f"/api/observations/{observation_id}/tracks").json()["provider_name"] == "meta_sam"
+    assert client_options == {
+        "base_url": "https://api.meta.ai/v1",
+        "api_key": "test-only-key",
+        "max_retries": 0,
+    }
+    assert fake_client.closed
+
+
+def test_failed_sam_rerun_does_not_fallback_or_replace_success(
+    uploaded_synthetic, monkeypatch,
+):
+    from kineticproof_api.sam_tracker import SAMTrackingError
+
+    client, observation_id, _ = uploaded_synthetic
+    base = f"/api/observations/{observation_id}"
+    roi = {"x": 0, "y": 12, "width": 13, "height": 13}
+    assert client.post(f"{base}/tracking", json=roi).status_code == 200
+    trace = client.get(f"{base}/tracks").json()
+    overlay = client.get(f"{base}/overlay").content
+    monkeypatch.setenv("MODEL_API_KEY", "test-only-key")
+
+    class FakeMetaClient:
+        async def close(self):
+            pass
+
+    monkeypatch.setattr(main, "AsyncOpenAI", lambda **kwargs: FakeMetaClient())
+    async def failed_sam_tracker(*args):
+        raise SAMTrackingError("synthetic provider failure")
+
+    monkeypatch.setattr(main, "track_sam_video", failed_sam_tracker)
+    monkeypatch.setattr(main, "track_video", lambda *args: pytest.fail("must not fall back to OpenCV"))
+    response = client.post(f"{base}/tracking?provider=meta_sam", json=roi)
+
+    assert response.status_code == 502
+    assert client.get(f"{base}/tracks").json() == trace
+    assert client.get(f"{base}/overlay").content == overlay
 
 
 def test_failed_csrt_update_has_null_geometry(uploaded_synthetic, monkeypatch):

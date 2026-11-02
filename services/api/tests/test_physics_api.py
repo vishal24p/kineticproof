@@ -24,12 +24,16 @@ def make_trace(values):
 @pytest.fixture
 def measurement_client():
     with TestClient(main.app) as client:
+        client.post("/api/session")
         yield client
 
 
 def add_observation(client, observation_id, values=None):
     observation = main.Observation(
-        Path("unused.mp4"), VideoMetadata(1.0, 64, 48, 10, 10.0)
+        Path("unused.mp4"), VideoMetadata(1.0, 64, 48, 10, 10.0),
+        owner_session_id=main.get_session_id(
+            client.cookies.get("kineticproof_session")
+        ),
     )
     if values is not None:
         observation.tracking_run = TrackingRun(make_trace(values), Path("unused-overlay.mp4"))
@@ -43,6 +47,24 @@ def payload():
 def test_measure_unknown_observation_returns_404(measurement_client):
     response = measurement_client.post("/api/observations/unknown/measure", json=payload())
     assert response.status_code == 404
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_unhandled_observation_error_is_not_stored(monkeypatch):
+    def fail_measure(*args):
+        raise RuntimeError("controlled test failure")
+
+    monkeypatch.setattr(main, "measure_trace", fail_measure)
+    with TestClient(main.app, raise_server_exceptions=False) as client:
+        client.post("/api/session")
+        add_observation(client, "unhandled", [0, 1, 0])
+        response = client.post(
+            "/api/observations/unhandled/measure", json=payload()
+        )
+
+    assert response.status_code == 500
+    assert response.text == "Internal Server Error"
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_measure_without_completed_trace_returns_409(measurement_client):
