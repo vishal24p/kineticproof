@@ -19,8 +19,8 @@
 **Files:**
 - Modify: `README.md`
 
-- [ ] Add a compact architecture flow and one table of observed evidence counts.
-- [ ] Link the detailed architecture, evaluation protocol, and dataset/annotation docs.
-- [ ] Verify values against source docs and run `git diff --check`.
+- [x] Add a compact architecture flow and one table of observed evidence counts.
+- [x] Link the detailed architecture, evaluation protocol, and dataset/annotation docs.
+- [x] Verify values against source docs and run `git diff --check`.
 
 **Acceptance:** README distinguishes implemented local components from unverified hosted/deployment behavior and reports no benchmark measurements as available.
