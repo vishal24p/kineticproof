@@ -206,7 +206,7 @@ def test_local_measurement_error_returns_422(planning_client, monkeypatch, provi
 
 
 @pytest.mark.parametrize("provider", ["template", "meta_muse"])
-@pytest.mark.parametrize("observation_id,status", [("unknown", 404), ("pending", 409)])
+@pytest.mark.parametrize("observation_id,status", [("unknown", 404), ("pending", 422)])
 def test_completed_observation_required(planning_client, monkeypatch, provider, observation_id, status):
     _, constructor = fake_muse(monkeypatch)
     response = planning_client.post(

@@ -237,7 +237,12 @@ async def next_trial(
     request: PlanningRequest,
     provider: Literal["template", "meta_muse"] = Query("template"),
 ) -> PlanningResponse:
-    trace = get_tracking_run(observation_id).trace
+    try:
+        trace = get_tracking_run(observation_id).trace
+    except HTTPException as error:
+        if error.status_code == 409:
+            raise HTTPException(422, str(error.detail)) from error
+        raise
     if provider == "template":
         try:
             return plan_next_trial(trace, request)
