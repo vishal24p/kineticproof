@@ -51,9 +51,9 @@
 - Add one ASGI middleware that applies `Cache-Control: no-store` to observation API response starts.
 - Register that middleware outside `UploadBodyLimit` so early upload rejections also receive the header.
 
-- [ ] Add tests for a successful observation JSON response, handled and unhandled observation errors, an overlay response, and `/health` exclusion; include a request rejected by the upload body limit.
+- [x] Add tests for a successful observation JSON response, handled and unhandled observation errors, an overlay response, and `/health` exclusion; include a request rejected by the upload body limit.
 - [x] Run the focused tests and confirm the new assertions fail before middleware is added.
-- [ ] Ensure both middleware responses and unhandled 500 responses from Starlette include the header on `/api/observations` and `/api/observations/...` paths.
+- [x] Ensure both middleware responses and unhandled 500 responses from Starlette include the header on `/api/observations` and `/api/observations/...` paths.
 - [x] Update API/security docs to describe process-lifetime local retention and list authentication/ownership, aggregate storage/concurrency limits, and host-specific retention as pre-deployment requirements.
 - [x] Bump `VERSION` from `0.6.0.0` to `0.6.1.0` and add a matching patch entry to `CHANGELOG.md`.
 - [x] Run `uv run --offline --project services/api pytest -c services/api/pyproject.toml services/api/tests -q` and `git diff --check`.
