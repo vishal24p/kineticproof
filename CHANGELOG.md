@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0.0] - 2026-11-02
+
+### Security
+
+- Add anonymous session bootstrap and signed HttpOnly cookie ownership for uploaded observations.
+- Require the owning session for upload, tracking, tracks, overlay, measurement and next-trial routes; keep session and observation responses no-store.
+- Document session limits and hosted TLS cookie configuration. The UI bootstrap remains a separate follow-up.
+
 ## [0.6.1.0] - 2026-11-02
 
 ### Security

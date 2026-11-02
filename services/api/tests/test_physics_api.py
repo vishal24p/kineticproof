@@ -24,12 +24,16 @@ def make_trace(values):
 @pytest.fixture
 def measurement_client():
     with TestClient(main.app) as client:
+        client.post("/api/session")
         yield client
 
 
 def add_observation(client, observation_id, values=None):
     observation = main.Observation(
-        Path("unused.mp4"), VideoMetadata(1.0, 64, 48, 10, 10.0)
+        Path("unused.mp4"), VideoMetadata(1.0, 64, 48, 10, 10.0),
+        owner_session_id=main.get_session_id(
+            client.cookies.get("kineticproof_session")
+        ),
     )
     if values is not None:
         observation.tracking_run = TrackingRun(make_trace(values), Path("unused-overlay.mp4"))
@@ -52,6 +56,7 @@ def test_unhandled_observation_error_is_not_stored(monkeypatch):
 
     monkeypatch.setattr(main, "measure_trace", fail_measure)
     with TestClient(main.app, raise_server_exceptions=False) as client:
+        client.post("/api/session")
         add_observation(client, "unhandled", [0, 1, 0])
         response = client.post(
             "/api/observations/unhandled/measure", json=payload()
