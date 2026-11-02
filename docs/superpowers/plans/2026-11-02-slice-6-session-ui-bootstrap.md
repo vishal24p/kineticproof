@@ -17,7 +17,7 @@
 - Disable upload until session bootstrap succeeds; allow retry after bootstrap failure.
 - Do not bump version or add a second changelog release; UI bootstrap completes the same 0.7 session-ownership release introduced by PR #9.
 - Keep current observation states and request/response shapes unchanged.
-- Do not change CI or Playwright server configuration. This branch does not contain the API endpoint; the real proxy smoke uses the API PR #9 worktree locally.
+- Do not change CI or Playwright server configuration. At initial verification, this branch did not contain the API endpoint, so the real proxy smoke used the API PR #9 worktree; the branch is now stacked on PR #9.
 
 ## Files
 
