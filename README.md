@@ -8,6 +8,17 @@
 
 **Project status:** Local API upload, OpenCV CSRT trace and overlay, pendulum measurement with JSON/CSV evidence, and template next-trial planning are implemented and tested with synthetic evidence. Explicit SAM and Muse adapters have offline tests only. Web remains a bootstrap. Authentic footage, tracking and measurement accuracy, benchmarks, deployment, and hosted Meta compatibility, entitlement, quality, latency and cost remain unverified.
 
+## Implemented path and evidence status
+
+The local path is: web bootstrap -> FastAPI upload and tracking API -> app-owned temporary media and in-process observation state -> OpenCV CSRT trace -> pendulum measurement and JSON/CSV evidence. The SAM and Muse adapters are explicit options with offline tests only; hosted behavior and public deployment are unverified. See [architecture](docs/ARCHITECTURE.md) for boundaries, [evaluation](docs/EVALUATION.md) for the benchmark protocol, and [data and annotation](docs/DATA_AND_ANNOTATION.md) for collection and labeling.
+
+| Evidence | Current count/status |
+|---|---:|
+| Verified dataset clips | 0 |
+| Independent reference labels | 0 |
+| Benchmark runs/results | 0 |
+| Benchmark metrics | Unavailable |
+
 **Hackathon:** Meta Global AI Developer Hackathon, Indie Developer track; public GitHub repository and 3-minute demo-video URLs required by the user-inspected submission form. Deadline: Nov 4, 2026, 9:00 PM US Eastern per event; re-confirm time and local conversion at submission. See `docs/HACKATHON_RULES.md` and `docs/SUBMISSION.md`.
 
 **Non-goals for the MVP:** native mobile app, live-streaming capture, user accounts, generalized arbitrary physics interpretation, invented measurements, complex infra. Future experiments are extensibility targets; do not silently claim they work.
