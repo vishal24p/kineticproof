@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0.0] - 2026-11-02
+
+### Added
+
+- API-only next-trial planning from existing traces, with a default offline template and one controlled suggestion separate from locally computed measurements.
+- Explicit `meta_muse` adapter with minimized context/measurement payload, strict suggestion validation, no retries or automatic fallback, and no planning persistence or web UI.
+- Offline synthetic-trace and fake-client tests; hosted Muse compatibility, entitlement, scientific quality, latency and cost remain unverified. No hosted or paid request was made.
+
 ## [0.5.0.0] - 2026-10-30
 
 ### Added

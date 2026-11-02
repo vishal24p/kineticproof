@@ -20,6 +20,10 @@ from kineticproof_api.tracking import (
     VideoMetadata, inspect_video, track_video,
 )
 from kineticproof_api.sam_tracker import SAMTrackingError, track_sam_video
+from kineticproof_api.planning import (
+    MusePlanningError, PlanningRequest, PlanningResponse, plan_next_trial,
+    plan_next_trial_muse,
+)
 
 MAX_UPLOAD_BYTES = 100_000_000
 MULTIPART_ALLOWANCE_BYTES = 65_536
@@ -225,3 +229,44 @@ def measure_observation(
 @app.get("/api/observations/{observation_id}/overlay")
 def get_overlay(observation_id: str) -> FileResponse:
     return FileResponse(get_tracking_run(observation_id).overlay_path, media_type="video/mp4")
+
+
+@app.post("/api/observations/{observation_id}/next-trial", response_model=PlanningResponse)
+async def next_trial(
+    observation_id: str,
+    request: PlanningRequest,
+    provider: Literal["template", "meta_muse"] = Query("template"),
+) -> PlanningResponse:
+    try:
+        trace = get_tracking_run(observation_id).trace
+    except HTTPException as error:
+        if error.status_code == 409:
+            raise HTTPException(422, str(error.detail)) from error
+        raise
+    if provider == "template":
+        try:
+            return plan_next_trial(trace, request)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+
+    api_key = getenv("MODEL_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "Meta Muse is unavailable: MODEL_API_KEY is not configured")
+    client = AsyncOpenAI(
+        base_url="https://api.meta.ai/v1", api_key=api_key, max_retries=0,
+    )
+    classified_error = False
+    try:
+        return await plan_next_trial_muse(trace, request, client)
+    except MusePlanningError as error:
+        classified_error = True
+        raise HTTPException(502, str(error)) from error
+    except ValueError as error:
+        classified_error = True
+        raise HTTPException(422, str(error)) from error
+    finally:
+        try:
+            await client.close()
+        except Exception as error:
+            if not classified_error:
+                raise HTTPException(502, "Meta Muse provider failed") from error
